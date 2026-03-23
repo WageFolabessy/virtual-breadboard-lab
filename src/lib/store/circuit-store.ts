@@ -190,6 +190,8 @@ interface CircuitStoreState {
   // Simulation results
   simulation: SimulationResult;
   activeNodes: Set<string>;
+  positiveNodes: Set<string>; // Nodes with positive voltage potential
+  negativeNodes: Set<string>; // Nodes with negative voltage potential
   
   // Component placement mode
   placementComponent: ComponentType | null;
@@ -287,8 +289,12 @@ const initialState: CircuitStoreState = {
     powerSourceId: null,
     componentStates: new Map(),
     message: 'No circuit',
+    positiveReachable: new Set(),
+    negativeReachable: new Set(),
   },
   activeNodes: new Set(),
+  positiveNodes: new Set(),
+  negativeNodes: new Set(),
   placementComponent: null,
   placementPins: [],
 };
@@ -472,13 +478,19 @@ export const useCircuitStore = create<CircuitStore>()(
             y: (firstNode.canvasPosition.y + lastNode.canvasPosition.y) / 2,
           };
           
+          // Get default component state, inject selectedWireColor for LED
+          let componentState = getDefaultComponentState(state.placementComponent);
+          if (state.placementComponent === 'led') {
+            componentState = { ...componentState, color: state.selectedWireColor } as LEDState;
+          }
+          
           const newComponent: CircuitComponent = {
             id: componentId,
             type: state.placementComponent,
             pins,
             canvasPosition,
             rotation: 0,
-            state: getDefaultComponentState(state.placementComponent),
+            state: componentState,
           };
           
           // Mark nodes as occupied
@@ -581,27 +593,37 @@ export const useCircuitStore = create<CircuitStore>()(
         const newActiveNodes = getActiveNodes(result.activePath, state.nodes);
         
         // CRITICAL: Avoid creating new Set reference if contents are identical
-        // This prevents cascading re-renders when activeNodes hasn't actually changed
-        const currentActiveNodes = state.activeNodes;
-        let activeNodesToSet = newActiveNodes;
+        // This prevents cascading re-renders when Sets haven't actually changed
         
-        if (currentActiveNodes.size === newActiveNodes.size) {
-          let areIdentical = true;
-          for (const nodeId of newActiveNodes) {
-            if (!currentActiveNodes.has(nodeId)) {
-              areIdentical = false;
-              break;
-            }
+        // Helper function to compare sets
+        const areSetsEqual = (setA: Set<string>, setB: Set<string>): boolean => {
+          if (setA.size !== setB.size) return false;
+          for (const item of setA) {
+            if (!setB.has(item)) return false;
           }
-          if (areIdentical) {
-            // Contents are the same - keep the existing Set reference
-            activeNodesToSet = currentActiveNodes;
-          }
-        }
+          return true;
+        };
+        
+        // Compare activeNodes
+        const activeNodesToSet = areSetsEqual(state.activeNodes, newActiveNodes)
+          ? state.activeNodes
+          : newActiveNodes;
+        
+        // Compare positiveNodes
+        const positiveNodesToSet = areSetsEqual(state.positiveNodes, result.positiveReachable)
+          ? state.positiveNodes
+          : result.positiveReachable;
+        
+        // Compare negativeNodes
+        const negativeNodesToSet = areSetsEqual(state.negativeNodes, result.negativeReachable)
+          ? state.negativeNodes
+          : result.negativeReachable;
         
         set({
           simulation: result,
           activeNodes: activeNodesToSet,
+          positiveNodes: positiveNodesToSet,
+          negativeNodes: negativeNodesToSet,
         });
       },
       
@@ -778,6 +800,8 @@ export const useWires = () => useCircuitStore((state) => state.wires);
 export const useSelectedTool = () => useCircuitStore((state) => state.selectedTool);
 export const useSimulation = () => useCircuitStore((state) => state.simulation);
 export const useActiveNodes = () => useCircuitStore((state) => state.activeNodes);
+export const usePositiveNodes = () => useCircuitStore((state) => state.positiveNodes);
+export const useNegativeNodes = () => useCircuitStore((state) => state.negativeNodes);
 
 // ---- Isolated Wire Drawing State (Does NOT trigger component re-renders) ----
 // This is a lightweight ref-based store for temporary wire drawing visuals

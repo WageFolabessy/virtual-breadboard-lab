@@ -106,6 +106,8 @@ export interface SimulationResult {
   componentStates: Map<string, ComponentState>;
   shortCircuitPath?: string[];     // Path that causes short circuit
   message: string;                 // Human-readable status message
+  positiveReachable: Set<string>;  // Nodes with positive voltage potential
+  negativeReachable: Set<string>;  // Nodes with negative voltage potential
 }
 
 // ---- Application State ----

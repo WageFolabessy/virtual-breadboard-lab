@@ -121,10 +121,10 @@ export const ComponentLibrary: React.FC = () => {
           })}
         </div>
 
-        {/* Wire Colors */}
+        {/* Wire & LED Colors */}
         <div className="pt-4 border-t border-gray-200">
           <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-            Wire Color
+            Wire / LED Color
           </h3>
           <div className="flex flex-wrap gap-2">
             {WIRE_COLOR_OPTIONS.map((option) => (

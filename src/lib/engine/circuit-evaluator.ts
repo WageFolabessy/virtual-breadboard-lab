@@ -38,6 +38,9 @@ export interface SimulationResultV2 {
   componentStates: Map<string, ComponentState>;
   shortCircuitPath?: string[];
   message: string;
+  // Voltage potential sets - nodes reachable from each battery terminal
+  positiveReachable: Set<string>;
+  negativeReachable: Set<string>;
 }
 
 // Maximum iterations for flood fill (safeguard)
@@ -343,7 +346,7 @@ export function evaluateCircuit(
   components: CircuitComponent[],
   wires: Wire[]
 ): SimulationResultV2 {
-  // Default result
+  // Default result (empty sets for voltage potential)
   const result: SimulationResultV2 = {
     status: 'incomplete',
     isCircuitComplete: false,
@@ -351,6 +354,8 @@ export function evaluateCircuit(
     powerSourceId: null,
     componentStates: new Map(),
     message: 'No complete circuit detected',
+    positiveReachable: new Set(),
+    negativeReachable: new Set(),
   };
   
   // Initialize all component states to OFF
@@ -408,6 +413,8 @@ export function evaluateCircuit(
       componentStates: result.componentStates,
       shortCircuitPath: shortCircuitCheck.path,
       message: 'SHORT CIRCUIT! Direct wire path from + to - without any load',
+      positiveReachable: batteryPositive,
+      negativeReachable: batteryNegative,
     };
   }
   
@@ -523,10 +530,14 @@ export function evaluateCircuit(
       powerSourceId: battery.id,
       componentStates: result.componentStates,
       message: `Circuit complete - ${activeComponentIds.length} component(s) active`,
+      positiveReachable,
+      negativeReachable,
     };
   }
   
-  // No active loads found
+  // No active loads found - still include voltage potential for visualization
+  result.positiveReachable = positiveReachable;
+  result.negativeReachable = negativeReachable;
   result.message = 'Circuit is open - no complete path through any load';
   return result;
 }

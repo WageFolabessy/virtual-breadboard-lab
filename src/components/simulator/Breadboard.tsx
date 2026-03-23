@@ -25,12 +25,14 @@ interface NodeProps {
   isActive: boolean;
   isWireStart: boolean;
   isPlacementTarget: boolean;
+  isPositive: boolean;   // Node has positive voltage potential
+  isNegative: boolean;   // Node has negative voltage potential
   selectedTool: ToolType;
   onNodeClick: (nodeId: string) => void;
 }
 
 const BreadboardNodeComponent: React.FC<NodeProps> = React.memo(
-  ({ node, isActive, isWireStart, isPlacementTarget, selectedTool, onNodeClick }) => {
+  ({ node, isActive, isWireStart, isPlacementTarget, isPositive, isNegative, selectedTool, onNodeClick }) => {
     // Use refs for hover state to avoid re-renders
     const circleRef = useRef<SVGCircleElement>(null);
 
@@ -42,18 +44,33 @@ const BreadboardNodeComponent: React.FC<NodeProps> = React.memo(
       [onNodeClick, node.id]
     );
 
+    // Determine fill color based on state priority
+    const getFillColor = useCallback((): string => {
+      if (node.isOccupied) return COLORS.NODE_OCCUPIED;
+      if (isActive) return COLORS.NODE_ACTIVE;
+      if (isWireStart) return COLORS.SELECTION_HIGHLIGHT;
+      if (isPlacementTarget) return COLORS.WIRE_GREEN;
+      // Voltage potential indicators (only show when not occupied/selected)
+      if (isPositive) return 'rgba(239, 68, 68, 0.6)'; // Red for positive
+      if (isNegative) return 'rgba(59, 130, 246, 0.6)'; // Blue for negative
+      // Default rail colors
+      if (node.stripType === 'power-rail') return COLORS.POWER_RAIL;
+      if (node.stripType === 'ground-rail') return COLORS.GROUND_RAIL;
+      return COLORS.NODE_EMPTY;
+    }, [node.isOccupied, node.stripType, isActive, isWireStart, isPlacementTarget, isPositive, isNegative]);
+
     // Use native DOM for hover effects (no React re-render)
     const handleMouseEnter = useCallback(() => {
       if (circleRef.current) {
         circleRef.current.setAttribute('r', String(RENDER.NODE_HOVER_RADIUS));
         circleRef.current.setAttribute('stroke', '#fff');
         circleRef.current.setAttribute('stroke-width', '1.5');
-        // Update fill for hover
-        if (!node.isOccupied && !isActive && !isWireStart && !isPlacementTarget) {
+        // Update fill for hover if not in a special state
+        if (!node.isOccupied && !isActive && !isWireStart && !isPlacementTarget && !isPositive && !isNegative) {
           circleRef.current.setAttribute('fill', COLORS.NODE_HOVER);
         }
       }
-    }, [node.isOccupied, isActive, isWireStart, isPlacementTarget]);
+    }, [node.isOccupied, isActive, isWireStart, isPlacementTarget, isPositive, isNegative]);
 
     const handleMouseLeave = useCallback(() => {
       if (circleRef.current) {
@@ -61,41 +78,11 @@ const BreadboardNodeComponent: React.FC<NodeProps> = React.memo(
         circleRef.current.setAttribute('stroke', 'none');
         circleRef.current.setAttribute('stroke-width', '0');
         // Restore original fill
-        let fillColor: string = COLORS.NODE_EMPTY;
-        if (node.isOccupied) {
-          fillColor = COLORS.NODE_OCCUPIED;
-        } else if (isActive) {
-          fillColor = COLORS.NODE_ACTIVE;
-        } else if (isWireStart) {
-          fillColor = COLORS.SELECTION_HIGHLIGHT;
-        } else if (isPlacementTarget) {
-          fillColor = COLORS.WIRE_GREEN;
-        } else if (node.stripType === 'power-rail') {
-          fillColor = COLORS.POWER_RAIL;
-        } else if (node.stripType === 'ground-rail') {
-          fillColor = COLORS.GROUND_RAIL;
-        }
-        circleRef.current.setAttribute('fill', fillColor);
+        circleRef.current.setAttribute('fill', getFillColor());
       }
-    }, [node.isOccupied, node.stripType, isActive, isWireStart, isPlacementTarget]);
+    }, [getFillColor]);
 
-    // Determine node color (initial render only)
-    let fillColor: string = COLORS.NODE_EMPTY;
-    
-    if (node.isOccupied) {
-      fillColor = COLORS.NODE_OCCUPIED;
-    } else if (isActive) {
-      fillColor = COLORS.NODE_ACTIVE;
-    } else if (isWireStart) {
-      fillColor = COLORS.SELECTION_HIGHLIGHT;
-    } else if (isPlacementTarget) {
-      fillColor = COLORS.WIRE_GREEN;
-    } else if (node.stripType === 'power-rail') {
-      fillColor = COLORS.POWER_RAIL;
-    } else if (node.stripType === 'ground-rail') {
-      fillColor = COLORS.GROUND_RAIL;
-    }
-
+    const fillColor = getFillColor();
     const radius = isWireStart ? RENDER.NODE_HOVER_RADIUS : RENDER.NODE_RADIUS;
     const cursor = selectedTool === 'select' ? 'pointer' : 'crosshair';
 
@@ -185,10 +172,12 @@ const ColNumber: React.FC<ColNumberProps> = ({ col, x, y }) => (
 export const Breadboard: React.FC = () => {
   // Use a single shallow-compared selector for all state to minimize subscriptions
   // and prevent re-renders when references change but content is the same
-  const { nodes, activeNodes, wireStartNodeId, placementPins, selectedTool } = useCircuitStore(
+  const { nodes, activeNodes, positiveNodes, negativeNodes, wireStartNodeId, placementPins, selectedTool } = useCircuitStore(
     useShallow((state) => ({
       nodes: state.nodes,
       activeNodes: state.activeNodes,
+      positiveNodes: state.positiveNodes,
+      negativeNodes: state.negativeNodes,
       wireStartNodeId: state.wireStartNodeId,
       placementPins: state.placementPins,
       selectedTool: state.selectedTool,
@@ -414,6 +403,8 @@ export const Breadboard: React.FC = () => {
           isActive={activeNodes.has(node.id)}
           isWireStart={wireStartNodeId === node.id}
           isPlacementTarget={placementPins.includes(node.id)}
+          isPositive={positiveNodes.has(node.id)}
+          isNegative={negativeNodes.has(node.id)}
           selectedTool={selectedTool}
           onNodeClick={onNodeClick}
         />
@@ -427,6 +418,8 @@ export const Breadboard: React.FC = () => {
           isActive={activeNodes.has(node.id)}
           isWireStart={wireStartNodeId === node.id}
           isPlacementTarget={placementPins.includes(node.id)}
+          isPositive={positiveNodes.has(node.id)}
+          isNegative={negativeNodes.has(node.id)}
           selectedTool={selectedTool}
           onNodeClick={onNodeClick}
         />
