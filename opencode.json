@@ -1,0 +1,43 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  
+  "permission": {
+    "bash": "allow",
+    "edit": "allow",
+    "read": "allow",
+    "write": "allow",
+    "grep": "allow",
+    "glob": "allow",
+    "lsp": "allow"
+  },
+
+  "mcp": {
+    "github_docs": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-github"],
+      "enabled": true
+    },
+    "browser_search": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-puppeteer"],
+      "enabled": true
+    }
+  },
+
+  "lsp": {
+    "typescript": {
+      "command": ["npx", "-y", "typescript-language-server", "--stdio"],
+      "extensions": [".js", ".jsx", ".ts", ".tsx"]
+    },
+    "tailwindcss": {
+      "command": ["npx", "-y", "@tailwindcss/language-server", "--stdio"],
+      "extensions": [".html", ".css", ".js", ".jsx", ".ts", ".tsx"]
+    }
+  },
+
+  "formatter": {
+    "prettier": {
+      "command": ["npx", "-y", "prettier", "--write", "{file}"]
+    }
+  }
+}
