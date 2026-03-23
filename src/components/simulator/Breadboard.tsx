@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 // ============================================
 // BREADBOARD SVG COMPONENT
@@ -12,11 +12,11 @@
 // 4. Uses useShallow for Set/Map selectors to avoid reference-change re-renders
 // ============================================
 
-import React, { useMemo, useCallback, useRef } from 'react';
-import { useShallow } from 'zustand/react/shallow';
-import { useCircuitStore } from '@/lib/store/circuit-store';
-import { BreadboardNode, ToolType } from '@/lib/types';
-import { BREADBOARD, RENDER, COLORS } from '@/lib/constants';
+import React, { useMemo, useCallback, useRef } from "react";
+import { useShallow } from "zustand/react/shallow";
+import { useCircuitStore } from "@/lib/store/circuit-store";
+import { BreadboardNode, ToolType } from "@/lib/types";
+import { BREADBOARD, RENDER, COLORS } from "@/lib/constants";
 
 // ---- Node Component ----
 // CRITICAL: No useCircuitStore inside this component - receives everything via props
@@ -25,14 +25,23 @@ interface NodeProps {
   isActive: boolean;
   isWireStart: boolean;
   isPlacementTarget: boolean;
-  isPositive: boolean;   // Node has positive voltage potential
-  isNegative: boolean;   // Node has negative voltage potential
+  isPositive: boolean; // Node has positive voltage potential
+  isNegative: boolean; // Node has negative voltage potential
   selectedTool: ToolType;
   onNodeClick: (nodeId: string) => void;
 }
 
 const BreadboardNodeComponent: React.FC<NodeProps> = React.memo(
-  ({ node, isActive, isWireStart, isPlacementTarget, isPositive, isNegative, selectedTool, onNodeClick }) => {
+  ({
+    node,
+    isActive,
+    isWireStart,
+    isPlacementTarget,
+    isPositive,
+    isNegative,
+    selectedTool,
+    onNodeClick,
+  }) => {
     // Use refs for hover state to avoid re-renders
     const circleRef = useRef<SVGCircleElement>(null);
 
@@ -41,7 +50,7 @@ const BreadboardNodeComponent: React.FC<NodeProps> = React.memo(
         e.stopPropagation();
         onNodeClick(node.id);
       },
-      [onNodeClick, node.id]
+      [onNodeClick, node.id],
     );
 
     // Determine fill color based on state priority
@@ -49,42 +58,64 @@ const BreadboardNodeComponent: React.FC<NodeProps> = React.memo(
       if (node.isOccupied) return COLORS.NODE_OCCUPIED;
       if (isActive) return COLORS.NODE_ACTIVE;
       if (isWireStart) return COLORS.SELECTION_HIGHLIGHT;
-      if (isPlacementTarget) return COLORS.WIRE_GREEN;
+      if (isPlacementTarget) return COLORS.PALETTE_GREEN;
       // Voltage potential indicators (only show when not occupied/selected)
-      if (isPositive) return 'rgba(239, 68, 68, 0.6)'; // Red for positive
-      if (isNegative) return 'rgba(59, 130, 246, 0.6)'; // Blue for negative
+      if (isPositive) return COLORS.POSITIVE_POTENTIAL;
+      if (isNegative) return COLORS.NEGATIVE_POTENTIAL;
       // Default rail colors
-      if (node.stripType === 'power-rail') return COLORS.POWER_RAIL;
-      if (node.stripType === 'ground-rail') return COLORS.GROUND_RAIL;
+      if (node.stripType === "power-rail") return COLORS.POWER_RAIL;
+      if (node.stripType === "ground-rail") return COLORS.GROUND_RAIL;
       return COLORS.NODE_EMPTY;
-    }, [node.isOccupied, node.stripType, isActive, isWireStart, isPlacementTarget, isPositive, isNegative]);
+    }, [
+      node.isOccupied,
+      node.stripType,
+      isActive,
+      isWireStart,
+      isPlacementTarget,
+      isPositive,
+      isNegative,
+    ]);
 
     // Use native DOM for hover effects (no React re-render)
     const handleMouseEnter = useCallback(() => {
       if (circleRef.current) {
-        circleRef.current.setAttribute('r', String(RENDER.NODE_HOVER_RADIUS));
-        circleRef.current.setAttribute('stroke', '#fff');
-        circleRef.current.setAttribute('stroke-width', '1.5');
+        circleRef.current.setAttribute("r", String(RENDER.NODE_HOVER_RADIUS));
+        circleRef.current.setAttribute("stroke", "#fff");
+        circleRef.current.setAttribute("stroke-width", "1.5");
         // Update fill for hover if not in a special state
-        if (!node.isOccupied && !isActive && !isWireStart && !isPlacementTarget && !isPositive && !isNegative) {
-          circleRef.current.setAttribute('fill', COLORS.NODE_HOVER);
+        if (
+          !node.isOccupied &&
+          !isActive &&
+          !isWireStart &&
+          !isPlacementTarget &&
+          !isPositive &&
+          !isNegative
+        ) {
+          circleRef.current.setAttribute("fill", COLORS.NODE_HOVER);
         }
       }
-    }, [node.isOccupied, isActive, isWireStart, isPlacementTarget, isPositive, isNegative]);
+    }, [
+      node.isOccupied,
+      isActive,
+      isWireStart,
+      isPlacementTarget,
+      isPositive,
+      isNegative,
+    ]);
 
     const handleMouseLeave = useCallback(() => {
       if (circleRef.current) {
-        circleRef.current.setAttribute('r', String(RENDER.NODE_RADIUS));
-        circleRef.current.setAttribute('stroke', 'none');
-        circleRef.current.setAttribute('stroke-width', '0');
+        circleRef.current.setAttribute("r", String(RENDER.NODE_RADIUS));
+        circleRef.current.setAttribute("stroke", "none");
+        circleRef.current.setAttribute("stroke-width", "0");
         // Restore original fill
-        circleRef.current.setAttribute('fill', getFillColor());
+        circleRef.current.setAttribute("fill", getFillColor());
       }
     }, [getFillColor]);
 
     const fillColor = getFillColor();
     const radius = isWireStart ? RENDER.NODE_HOVER_RADIUS : RENDER.NODE_RADIUS;
-    const cursor = selectedTool === 'select' ? 'pointer' : 'crosshair';
+    const cursor = selectedTool === "select" ? "pointer" : "crosshair";
 
     return (
       <circle
@@ -93,18 +124,18 @@ const BreadboardNodeComponent: React.FC<NodeProps> = React.memo(
         cy={node.canvasPosition.y}
         r={radius}
         fill={fillColor}
-        stroke={isWireStart ? '#fff' : 'none'}
+        stroke={isWireStart ? "#fff" : "none"}
         strokeWidth={isWireStart ? 1.5 : 0}
         onClick={handleClick}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        style={{ cursor, transition: 'fill 0.1s ease' }}
+        style={{ cursor, transition: "fill 0.1s ease" }}
       />
     );
-  }
+  },
 );
 
-BreadboardNodeComponent.displayName = 'BreadboardNodeComponent';
+BreadboardNodeComponent.displayName = "BreadboardNodeComponent";
 
 // ---- Rail Label Component ----
 interface RailLabelProps {
@@ -164,7 +195,7 @@ const ColNumber: React.FC<ColNumberProps> = ({ col, x, y }) => (
     textAnchor="middle"
     dominantBaseline="middle"
   >
-    {col % 5 === 0 ? col : ''}
+    {col % 5 === 0 ? col : ""}
   </text>
 );
 
@@ -172,7 +203,15 @@ const ColNumber: React.FC<ColNumberProps> = ({ col, x, y }) => (
 export const Breadboard: React.FC = () => {
   // Use a single shallow-compared selector for all state to minimize subscriptions
   // and prevent re-renders when references change but content is the same
-  const { nodes, activeNodes, positiveNodes, negativeNodes, wireStartNodeId, placementPins, selectedTool } = useCircuitStore(
+  const {
+    nodes,
+    activeNodes,
+    positiveNodes,
+    negativeNodes,
+    wireStartNodeId,
+    placementPins,
+    selectedTool,
+  } = useCircuitStore(
     useShallow((state) => ({
       nodes: state.nodes,
       activeNodes: state.activeNodes,
@@ -181,7 +220,7 @@ export const Breadboard: React.FC = () => {
       wireStartNodeId: state.wireStartNodeId,
       placementPins: state.placementPins,
       selectedTool: state.selectedTool,
-    }))
+    })),
   );
 
   // Stable callback reference for node clicks - uses getState() to avoid dependency cycles
@@ -198,7 +237,7 @@ export const Breadboard: React.FC = () => {
     const terminals: BreadboardNode[] = [];
 
     nodesArray.forEach((node) => {
-      if (node.stripType === 'power-rail' || node.stripType === 'ground-rail') {
+      if (node.stripType === "power-rail" || node.stripType === "ground-rail") {
         rails.push(node);
       } else {
         terminals.push(node);
@@ -215,7 +254,10 @@ export const Breadboard: React.FC = () => {
   // Generate row labels with positions
   const rowLabels = useMemo(() => {
     const labels: { row: string; y: number }[] = [];
-    const allRows = [...BREADBOARD.TERMINAL_ROWS_TOP, ...BREADBOARD.TERMINAL_ROWS_BOTTOM];
+    const allRows = [
+      ...BREADBOARD.TERMINAL_ROWS_TOP,
+      ...BREADBOARD.TERMINAL_ROWS_BOTTOM,
+    ];
 
     allRows.forEach((row) => {
       // Find a node in this row to get Y position
@@ -231,7 +273,7 @@ export const Breadboard: React.FC = () => {
   // Get column positions for labels
   const colLabels = useMemo(() => {
     const labels: { col: number; x: number }[] = [];
-    
+
     for (let col = 1; col <= BREADBOARD.COLUMNS; col++) {
       const node = nodes.get(`A-${col}`);
       if (node) {
@@ -244,12 +286,17 @@ export const Breadboard: React.FC = () => {
 
   // Calculate rail background rectangles
   const railBackgrounds = useMemo(() => {
-    const topPowerNode = nodes.get('power-top-1');
-    const topGroundNode = nodes.get('ground-top-1');
-    const bottomPowerNode = nodes.get('power-bottom-1');
-    const bottomGroundNode = nodes.get('ground-bottom-1');
+    const topPowerNode = nodes.get("power-top-1");
+    const topGroundNode = nodes.get("ground-top-1");
+    const bottomPowerNode = nodes.get("power-bottom-1");
+    const bottomGroundNode = nodes.get("ground-bottom-1");
 
-    if (!topPowerNode || !topGroundNode || !bottomPowerNode || !bottomGroundNode) {
+    if (
+      !topPowerNode ||
+      !topGroundNode ||
+      !bottomPowerNode ||
+      !bottomGroundNode
+    ) {
       return [];
     }
 
@@ -257,7 +304,7 @@ export const Breadboard: React.FC = () => {
 
     return [
       {
-        id: 'top-power-bg',
+        id: "top-power-bg",
         x: RENDER.PADDING_X - 10,
         y: topPowerNode.canvasPosition.y - 8,
         width,
@@ -265,7 +312,7 @@ export const Breadboard: React.FC = () => {
         fill: COLORS.POWER_RAIL_BG,
       },
       {
-        id: 'top-ground-bg',
+        id: "top-ground-bg",
         x: RENDER.PADDING_X - 10,
         y: topGroundNode.canvasPosition.y - 8,
         width,
@@ -273,7 +320,7 @@ export const Breadboard: React.FC = () => {
         fill: COLORS.GROUND_RAIL_BG,
       },
       {
-        id: 'bottom-power-bg',
+        id: "bottom-power-bg",
         x: RENDER.PADDING_X - 10,
         y: bottomPowerNode.canvasPosition.y - 8,
         width,
@@ -281,7 +328,7 @@ export const Breadboard: React.FC = () => {
         fill: COLORS.POWER_RAIL_BG,
       },
       {
-        id: 'bottom-ground-bg',
+        id: "bottom-ground-bg",
         x: RENDER.PADDING_X - 10,
         y: bottomGroundNode.canvasPosition.y - 8,
         width,
@@ -340,13 +387,13 @@ export const Breadboard: React.FC = () => {
       <rect
         x={RENDER.PADDING_X - 10}
         y={
-          (nodes.get('E-1')?.canvasPosition.y ?? 0) +
+          (nodes.get("E-1")?.canvasPosition.y ?? 0) +
           RENDER.NODE_SPACING / 2 +
           2
         }
         width={(BREADBOARD.COLUMNS - 1) * RENDER.NODE_SPACING + 20}
         height={RENDER.SECTION_GAP - 4}
-        fill="#D4CFC0"
+        fill={COLORS.CENTER_GAP}
         rx={2}
       />
 
@@ -391,7 +438,13 @@ export const Breadboard: React.FC = () => {
           key={col}
           col={col}
           x={x}
-          y={RENDER.PADDING_Y + 2 * RENDER.NODE_SPACING + RENDER.RAIL_GAP + RENDER.RAIL_TO_TERMINAL_GAP - 12}
+          y={
+            RENDER.PADDING_Y +
+            2 * RENDER.NODE_SPACING +
+            RENDER.RAIL_GAP +
+            RENDER.RAIL_TO_TERMINAL_GAP -
+            12
+          }
         />
       ))}
 

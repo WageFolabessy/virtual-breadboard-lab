@@ -8,7 +8,8 @@
 import React from "react";
 import { useCircuitStore } from "@/lib/store/circuit-store";
 import { ComponentType } from "@/lib/types";
-import { COMPONENT_DEFINITIONS, WIRE_COLOR_OPTIONS } from "@/lib/constants";
+import { COMPONENT_DEFINITIONS, COLOR_PALETTE } from "@/lib/constants";
+import { ColorSwatchButton } from "@/components/ui";
 
 interface ComponentCardProps {
   type: ComponentType;
@@ -49,38 +50,12 @@ const ComponentCard: React.FC<ComponentCardProps> = ({
   );
 };
 
-interface WireColorButtonProps {
-  color: string;
-  name: string;
-  isSelected: boolean;
-  onClick: () => void;
-}
-
-const WireColorButton: React.FC<WireColorButtonProps> = ({
-  color,
-  name,
-  isSelected,
-  onClick,
-}) => {
-  return (
-    <button
-      onClick={onClick}
-      title={name}
-      className={`
-        w-8 h-8 rounded-full border-2 transition-all duration-150
-        ${isSelected ? "border-gray-800 scale-110 ring-2 ring-offset-2 ring-gray-400" : "border-gray-300 hover:scale-105"}
-      `}
-      style={{ backgroundColor: color }}
-    />
-  );
-};
-
 export const ComponentLibrary: React.FC = () => {
   const {
     selectedTool,
     setSelectedTool,
-    selectedWireColor,
-    setWireColor,
+    selectedColor,
+    setSelectedColor,
     placementComponent,
     placementPins,
   } = useCircuitStore();
@@ -121,19 +96,19 @@ export const ComponentLibrary: React.FC = () => {
           })}
         </div>
 
-        {/* Wire & LED Colors */}
+        {/* Colors */}
         <div className="pt-4 border-t border-gray-200">
           <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-            Wire / LED Color
+            Color
           </h3>
           <div className="flex flex-wrap gap-2">
-            {WIRE_COLOR_OPTIONS.map((option) => (
-              <WireColorButton
+            {COLOR_PALETTE.map((option) => (
+              <ColorSwatchButton
                 key={option.value}
                 color={option.value}
                 name={option.name}
-                isSelected={selectedWireColor === option.value}
-                onClick={() => setWireColor(option.value)}
+                isSelected={selectedColor === option.value}
+                onClick={() => setSelectedColor(option.value)}
               />
             ))}
           </div>

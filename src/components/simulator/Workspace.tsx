@@ -4,17 +4,31 @@
 // WORKSPACE COMPONENT
 // Main client component that composes the simulator
 // ============================================
-// 
+//
 // PERFORMANCE OPTIMIZATIONS:
 // 1. Wire preview uses isolated ref-based state (no React re-renders)
 // 2. Circuit evaluation ONLY runs on finalized actions (mouseUp)
 // 3. Memoized selectors prevent cascade re-renders
+// 4. All logic extracted into dedicated hooks — this component is pure rendering
 // ============================================
 
-import React, { useEffect, useState, useRef, useCallback, useSyncExternalStore } from "react";
-import { useCircuitStore, getWireDrawingState, setWireDrawingPosition, subscribeToWireDrawing } from "@/lib/store/circuit-store";
-import { LEDState, BuzzerState, SwitchState } from "@/lib/types";
+import React, { useSyncExternalStore } from "react";
+import {
+  useCircuitStore,
+  getWireDrawingState,
+  subscribeToWireDrawing,
+} from "@/lib/store/circuit-store";
+import {
+  asBatteryState,
+  asLEDState,
+  asSwitchState,
+  asResistorState,
+  asCapacitorState,
+  asBuzzerState,
+} from "@/lib/types";
 import { RENDER } from "@/lib/constants";
+import { StatusIndicator } from "@/components/ui/StatusIndicator";
+import { KbdShortcut } from "@/components/ui/KbdShortcut";
 import { Breadboard } from "./Breadboard";
 import { Toolbar } from "./Toolbar";
 import { ComponentLibrary } from "./ComponentLibrary";
@@ -28,108 +42,68 @@ import {
   Buzzer,
 } from "./electronics";
 import { Header } from "@/components/Header";
+import { useHydration } from "@/hooks/useHydration";
+import {
+  useCircuitActions,
+  useComponentActiveChecker,
+} from "@/hooks/useCircuitActions";
+import { useCanvasInteraction } from "@/hooks/useCanvasInteraction";
 
 // ---- Isolated Wire Preview Component ----
 // Uses useSyncExternalStore to subscribe to ref-based state without triggering parent re-renders
-// CRITICAL: Does NOT receive nodes Map as prop - queries specific node via getState() to avoid re-renders
-const IsolatedWirePreview: React.FC<{ color: string }> = React.memo(({ color }) => {
-  const wireDrawing = useSyncExternalStore(
-    subscribeToWireDrawing,
-    getWireDrawingState,
-    getWireDrawingState
-  );
+// CRITICAL: Does NOT receive nodes Map as prop — queries specific node via getState()
+const IsolatedWirePreview: React.FC<{ color: string }> = React.memo(
+  ({ color }) => {
+    const wireDrawing = useSyncExternalStore(
+      subscribeToWireDrawing,
+      getWireDrawingState,
+      getWireDrawingState,
+    );
 
-  if (!wireDrawing.isDrawing || !wireDrawing.startNodeId) return null;
+    if (!wireDrawing.isDrawing || !wireDrawing.startNodeId) return null;
 
-  // Query the specific node directly from store - no prop dependency on entire Map
-  const startNode = useCircuitStore.getState().nodes.get(wireDrawing.startNodeId);
-  if (!startNode) return null;
+    const startNode = useCircuitStore
+      .getState()
+      .nodes.get(wireDrawing.startNodeId);
+    if (!startNode) return null;
 
-  return (
-    <WirePreview
-      startNode={startNode}
-      currentX={wireDrawing.currentX}
-      currentY={wireDrawing.currentY}
-      color={color}
-    />
-  );
-});
-IsolatedWirePreview.displayName = 'IsolatedWirePreview';
+    return (
+      <WirePreview
+        startNode={startNode}
+        currentX={wireDrawing.currentX}
+        currentY={wireDrawing.currentY}
+        color={color}
+      />
+    );
+  },
+);
+IsolatedWirePreview.displayName = "IsolatedWirePreview";
 
+// ---- Main Workspace Component ----
 export const Workspace: React.FC = () => {
-  // Selective subscriptions for state values only
+  // ---- State subscriptions ----
   const nodes = useCircuitStore((state) => state.nodes);
   const components = useCircuitStore((state) => state.components);
   const wires = useCircuitStore((state) => state.wires);
   const wireStartNodeId = useCircuitStore((state) => state.wireStartNodeId);
-  const selectedWireColor = useCircuitStore((state) => state.selectedWireColor);
-  const selectedComponentId = useCircuitStore((state) => state.selectedComponentId);
+  const selectedColor = useCircuitStore((state) => state.selectedColor);
+  const selectedComponentId = useCircuitStore(
+    (state) => state.selectedComponentId,
+  );
   const simulation = useCircuitStore((state) => state.simulation);
   const activeNodes = useCircuitStore((state) => state.activeNodes);
 
-  const svgRef = useRef<SVGSVGElement>(null);
-  const [isInitialized, setIsInitialized] = useState(false);
-
-  // Stable action callbacks using getState() to avoid dependency cycles
-  const selectComponent = useCallback((id: string | null) => {
-    useCircuitStore.getState().selectComponent(id);
-  }, []);
-
-  const removeWire = useCallback((wireId: string) => {
-    useCircuitStore.getState().removeWire(wireId);
-  }, []);
-
-  const toggleSwitch = useCallback((componentId: string) => {
-    useCircuitStore.getState().toggleSwitch(componentId);
-  }, []);
-
-  // Initialize on mount - hydration handles state restoration, we just need to wait for it
-  // CRITICAL: Do NOT call initialize() - it would overwrite hydrated state
-  useEffect(() => {
-    // Zustand persist handles hydration automatically
-    // We just need to mark as initialized after a tick to avoid hydration mismatch
-    const timer = setTimeout(() => {
-      setIsInitialized(true);
-    }, 0);
-    return () => clearTimeout(timer);
-  }, []); // Empty deps - only run once on mount
-
-  // Track mouse position for wire preview - uses isolated state (no component re-render)
-  const handleMouseMove = useCallback(
-    (e: React.MouseEvent<SVGSVGElement>) => {
-      if (!svgRef.current || !wireStartNodeId) return;
-
-      const rect = svgRef.current.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      // Update isolated wire drawing state (does NOT trigger React re-render)
-      setWireDrawingPosition(x, y);
-    },
-    [wireStartNodeId]
+  // ---- Hooks ----
+  const { isInitialized } = useHydration();
+  const { selectComponent, removeWire, toggleSwitch, removeComponent } =
+    useCircuitActions();
+  const isComponentActive = useComponentActiveChecker(components, activeNodes);
+  const { svgRef, handleMouseMove, handleSvgClick } = useCanvasInteraction(
+    wireStartNodeId,
+    () => selectComponent(null),
   );
 
-  // Handle click outside components to deselect
-  const handleSvgClick = useCallback(() => {
-    selectComponent(null);
-  }, [selectComponent]);
-
-  // Check if component is in active circuit
-  const isComponentActive = useCallback(
-    (componentId: string) => {
-      const component = components.find((c) => c.id === componentId);
-      if (!component) return false;
-
-      const connectedPins = component.pins.filter(
-        (p) => p.connectedNodeId !== null,
-      );
-      return connectedPins.every((pin) =>
-        activeNodes.has(pin.connectedNodeId!),
-      );
-    },
-    [components, activeNodes],
-  );
-
-  // Don't render until initialized (prevents hydration mismatch)
+  // ---- Loading gate ----
   if (!isInitialized) {
     return (
       <div className="h-screen flex items-center justify-center bg-gray-100">
@@ -143,11 +117,10 @@ export const Workspace: React.FC = () => {
   return (
     <div className="h-screen flex flex-col bg-gray-100">
       <Header />
-      {/* Top Toolbar */}
       <Toolbar />
 
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Sidebar - Component Library */}
+        {/* Left Sidebar */}
         <ComponentLibrary />
 
         {/* Main Canvas Area */}
@@ -163,7 +136,6 @@ export const Workspace: React.FC = () => {
               onClick={handleSvgClick}
               className="block"
             >
-              {/* Breadboard Grid */}
               <Breadboard />
 
               {/* Wires Layer */}
@@ -184,8 +156,7 @@ export const Workspace: React.FC = () => {
                   );
                 })}
 
-                {/* Wire Preview - Uses isolated state for performance */}
-                <IsolatedWirePreview color={selectedWireColor} />
+                <IsolatedWirePreview color={selectedColor} />
               </g>
 
               {/* Components Layer */}
@@ -210,9 +181,7 @@ export const Workspace: React.FC = () => {
                     const simState = simulation.componentStates.get(
                       component.id,
                     );
-                    const isLit = simState
-                      ? (simState as LEDState).isLit
-                      : false;
+                    const ledState = simState ? asLEDState(simState) : null;
 
                     return (
                       <LED
@@ -220,7 +189,7 @@ export const Workspace: React.FC = () => {
                         component={component}
                         nodes={nodes}
                         isSelected={isSelected}
-                        isLit={isLit}
+                        isLit={ledState?.isLit ?? false}
                         onClick={() => selectComponent(component.id)}
                       />
                     );
@@ -240,15 +209,14 @@ export const Workspace: React.FC = () => {
                   }
 
                   if (component.type === "switch") {
+                    const switchState = asSwitchState(component.state);
                     return (
                       <Switch
                         key={component.id}
                         component={component}
                         nodes={nodes}
                         isSelected={isSelected}
-                        isActive={
-                          isActive && (component.state as SwitchState).isClosed
-                        }
+                        isActive={isActive && (switchState?.isClosed ?? false)}
                         onToggle={() => toggleSwitch(component.id)}
                         onClick={() => selectComponent(component.id)}
                       />
@@ -272,9 +240,9 @@ export const Workspace: React.FC = () => {
                     const simState = simulation.componentStates.get(
                       component.id,
                     );
-                    const isBuzzing = simState
-                      ? (simState as BuzzerState).isActive
-                      : false;
+                    const buzzerState = simState
+                      ? asBuzzerState(simState)
+                      : null;
 
                     return (
                       <Buzzer
@@ -282,7 +250,7 @@ export const Workspace: React.FC = () => {
                         component={component}
                         nodes={nodes}
                         isSelected={isSelected}
-                        isActive={isBuzzing}
+                        isActive={buzzerState?.isActive ?? false}
                         onClick={() => selectComponent(component.id)}
                       />
                     );
@@ -299,34 +267,10 @@ export const Workspace: React.FC = () => {
                 Components: {components.length} | Wires: {wires.length}
               </div>
               <div className="flex items-center gap-4">
-                <span>
-                  Press{" "}
-                  <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-xs">
-                    V
-                  </kbd>{" "}
-                  Select
-                </span>
-                <span>
-                  Press{" "}
-                  <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-xs">
-                    W
-                  </kbd>{" "}
-                  Wire
-                </span>
-                <span>
-                  Press{" "}
-                  <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-xs">
-                    D
-                  </kbd>{" "}
-                  Delete
-                </span>
-                <span>
-                  Press{" "}
-                  <kbd className="px-1.5 py-0.5 bg-gray-100 rounded text-xs">
-                    ESC
-                  </kbd>{" "}
-                  Cancel
-                </span>
+                <KbdShortcut shortcut="V" label="Select" />
+                <KbdShortcut shortcut="W" label="Wire" />
+                <KbdShortcut shortcut="D" label="Delete" />
+                <KbdShortcut shortcut="ESC" label="Cancel" />
               </div>
             </div>
           </div>
@@ -336,55 +280,24 @@ export const Workspace: React.FC = () => {
         <div className="w-64 bg-gray-50 border-l border-gray-200 p-4">
           <h2 className="text-lg font-bold text-gray-800 mb-4">Circuit Info</h2>
 
-          {/* Circuit Status */}
-          <div className="bg-white rounded-lg p-4 border border-gray-200 mb-4">
-            <h3 className="text-sm font-semibold text-gray-600 mb-2">Status</h3>
-            <div
-              className={`
-                flex items-center gap-2 text-sm font-medium
-                ${simulation.status === "complete" ? "text-green-600" : ""}
-                ${simulation.status === "incomplete" ? "text-gray-500" : ""}
-                ${simulation.status === "short-circuit" ? "text-red-600" : ""}
-              `}
-            >
-              <span
-                className={`
-                  w-3 h-3 rounded-full
-                  ${simulation.status === "complete" ? "bg-green-500" : ""}
-                  ${simulation.status === "incomplete" ? "bg-gray-400" : ""}
-                  ${simulation.status === "short-circuit" ? "bg-red-500 animate-pulse" : ""}
-                `}
-              />
-              {simulation.status === "complete" && "Complete Circuit"}
-              {simulation.status === "incomplete" && "Open Circuit"}
-              {simulation.status === "short-circuit" && "SHORT CIRCUIT!"}
-            </div>
-            {simulation.message && (
-              <p
-                className={`mt-2 text-xs ${
-                  simulation.status === "short-circuit"
-                    ? "text-red-500"
-                    : "text-gray-400"
-                }`}
-              >
-                {simulation.message}
-              </p>
-            )}
-          </div>
+          <StatusIndicator
+            status={simulation.status}
+            message={simulation.message}
+          />
 
           {/* Selected Component Info */}
-          {selectedComponentId && (
-            <div className="bg-white rounded-lg p-4 border border-gray-200 mb-4">
-              <h3 className="text-sm font-semibold text-gray-600 mb-2">
-                Selected Component
-              </h3>
-              {(() => {
-                const component = components.find(
-                  (c) => c.id === selectedComponentId,
-                );
-                if (!component) return null;
+          {selectedComponentId &&
+            (() => {
+              const component = components.find(
+                (c) => c.id === selectedComponentId,
+              );
+              if (!component) return null;
 
-                return (
+              return (
+                <div className="bg-white rounded-lg p-4 border border-gray-200 mb-4">
+                  <h3 className="text-sm font-semibold text-gray-600 mb-2">
+                    Selected Component
+                  </h3>
                   <div className="space-y-2 text-sm">
                     <p>
                       <span className="text-gray-500">Type:</span>{" "}
@@ -398,125 +311,122 @@ export const Workspace: React.FC = () => {
                         {component.id.slice(0, 8)}...
                       </span>
                     </p>
-                    {component.type === "battery" && (
-                      <p>
-                        <span className="text-gray-500">Voltage:</span>{" "}
-                        <span className="font-medium">
-                          {(component.state as { voltage: number }).voltage}V
-                        </span>
-                      </p>
-                    )}
-                    {component.type === "led" && (
-                      <p>
-                        <span className="text-gray-500">State:</span>{" "}
-                        <span
-                          className={`font-medium ${
-                            (
-                              simulation.componentStates.get(component.id) as
-                                | LEDState
-                                | undefined
-                            )?.isLit
-                              ? "text-green-600"
-                              : "text-gray-500"
-                          }`}
-                        >
-                          {(
-                            simulation.componentStates.get(component.id) as
-                              | LEDState
-                              | undefined
-                          )?.isLit
-                            ? "ON"
-                            : "OFF"}
-                        </span>
-                      </p>
-                    )}
-                    {component.type === "switch" && (
-                      <>
-                        <p>
-                          <span className="text-gray-500">State:</span>{" "}
-                          <span
-                            className={`font-medium ${
-                              (component.state as SwitchState).isClosed
-                                ? "text-green-600"
-                                : "text-gray-500"
-                            }`}
-                          >
-                            {(component.state as SwitchState).isClosed
-                              ? "CLOSED"
-                              : "OPEN"}
-                          </span>
-                        </p>
-                        <button
-                          onClick={() => toggleSwitch(component.id)}
-                          className="w-full px-3 py-1.5 bg-blue-50 text-blue-600 text-sm rounded hover:bg-blue-100 transition-colors"
-                        >
-                          Toggle Switch
-                        </button>
-                      </>
-                    )}
-                    {component.type === "resistor" && (
-                      <p>
-                        <span className="text-gray-500">Resistance:</span>{" "}
-                        <span className="font-medium">
-                          {
-                            (component.state as { resistance: number })
-                              .resistance
-                          }
-                          Ω
-                        </span>
-                      </p>
-                    )}
-                    {component.type === "capacitor" && (
-                      <p>
-                        <span className="text-gray-500">Capacitance:</span>{" "}
-                        <span className="font-medium">
-                          {
-                            (component.state as { capacitance: number })
-                              .capacitance
-                          }
-                          µF
-                        </span>
-                      </p>
-                    )}
-                    {component.type === "buzzer" && (
-                      <p>
-                        <span className="text-gray-500">State:</span>{" "}
-                        <span
-                          className={`font-medium ${
-                            (
-                              simulation.componentStates.get(component.id) as
-                                | BuzzerState
-                                | undefined
-                            )?.isActive
-                              ? "text-yellow-600"
-                              : "text-gray-500"
-                          }`}
-                        >
-                          {(
-                            simulation.componentStates.get(component.id) as
-                              | BuzzerState
-                              | undefined
-                          )?.isActive
-                            ? "BUZZING"
-                            : "SILENT"}
-                        </span>
-                      </p>
-                    )}
+                    {component.type === "battery" &&
+                      (() => {
+                        const state = asBatteryState(component.state);
+                        return state ? (
+                          <p>
+                            <span className="text-gray-500">Voltage:</span>{" "}
+                            <span className="font-medium">
+                              {state.voltage}V
+                            </span>
+                          </p>
+                        ) : null;
+                      })()}
+                    {component.type === "led" &&
+                      (() => {
+                        const simState = simulation.componentStates.get(
+                          component.id,
+                        );
+                        const ledState = simState ? asLEDState(simState) : null;
+                        return (
+                          <p>
+                            <span className="text-gray-500">State:</span>{" "}
+                            <span
+                              className={`font-medium ${
+                                ledState?.isLit
+                                  ? "text-green-600"
+                                  : "text-gray-500"
+                              }`}
+                            >
+                              {ledState?.isLit ? "ON" : "OFF"}
+                            </span>
+                          </p>
+                        );
+                      })()}
+                    {component.type === "switch" &&
+                      (() => {
+                        const switchState = asSwitchState(component.state);
+                        return (
+                          <>
+                            <p>
+                              <span className="text-gray-500">State:</span>{" "}
+                              <span
+                                className={`font-medium ${
+                                  switchState?.isClosed
+                                    ? "text-green-600"
+                                    : "text-gray-500"
+                                }`}
+                              >
+                                {switchState?.isClosed ? "CLOSED" : "OPEN"}
+                              </span>
+                            </p>
+                            <button
+                              onClick={() => toggleSwitch(component.id)}
+                              className="w-full px-3 py-1.5 bg-blue-50 text-blue-600 text-sm rounded hover:bg-blue-100 transition-colors"
+                            >
+                              Toggle Switch
+                            </button>
+                          </>
+                        );
+                      })()}
+                    {component.type === "resistor" &&
+                      (() => {
+                        const state = asResistorState(component.state);
+                        return state ? (
+                          <p>
+                            <span className="text-gray-500">Resistance:</span>{" "}
+                            <span className="font-medium">
+                              {state.resistance}Ω
+                            </span>
+                          </p>
+                        ) : null;
+                      })()}
+                    {component.type === "capacitor" &&
+                      (() => {
+                        const state = asCapacitorState(component.state);
+                        return state ? (
+                          <p>
+                            <span className="text-gray-500">Capacitance:</span>{" "}
+                            <span className="font-medium">
+                              {state.capacitance}µF
+                            </span>
+                          </p>
+                        ) : null;
+                      })()}
+                    {component.type === "buzzer" &&
+                      (() => {
+                        const simState = simulation.componentStates.get(
+                          component.id,
+                        );
+                        const buzzerState = simState
+                          ? asBuzzerState(simState)
+                          : null;
+                        return (
+                          <p>
+                            <span className="text-gray-500">State:</span>{" "}
+                            <span
+                              className={`font-medium ${
+                                buzzerState?.isActive
+                                  ? "text-yellow-600"
+                                  : "text-gray-500"
+                              }`}
+                            >
+                              {buzzerState?.isActive ? "BUZZING" : "SILENT"}
+                            </span>
+                          </p>
+                        );
+                      })()}
                     <button
-                      onClick={() => {
-                        useCircuitStore
-                          .getState()
-                          .removeComponent(selectedComponentId);
-                      }}
+                      onClick={() => removeComponent(selectedComponentId)}
                       className="mt-2 w-full px-3 py-1.5 bg-red-50 text-red-600 text-sm rounded hover:bg-red-100 transition-colors"
                     >
                       Delete Component
                     </button>
                   </div>
-                );
-              })()}
-            </div>
-          )}
+                </div>
+              );
+            })()}
 
           {/* Help */}
           <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">

@@ -179,7 +179,7 @@ interface CircuitStoreState {
   
   // Wires
   wires: Wire[];
-  selectedWireColor: string;
+  selectedColor: string;
   
   // UI State
   selectedTool: ToolType;
@@ -211,7 +211,7 @@ interface CircuitStoreActions {
   startWire: (nodeId: string) => void;
   endWire: (nodeId: string) => void;
   cancelWire: () => void;
-  setWireColor: (color: string) => void;
+  setSelectedColor: (color: string) => void;
   removeWire: (wireId: string) => void;
   
   // Component actions
@@ -277,7 +277,7 @@ const initialState: CircuitStoreState = {
   nodes: initialNodes,
   components: [],
   wires: [],
-  selectedWireColor: COLORS.WIRE_RED,
+  selectedColor: COLORS.PALETTE_RED,
   selectedTool: 'select',
   selectedComponentId: null,
   wireStartNodeId: null,
@@ -411,7 +411,7 @@ export const useCircuitStore = create<CircuitStore>()(
           id: generateId(),
           startNodeId,
           endNodeId: nodeId,
-          color: state.selectedWireColor,
+          color: state.selectedColor,
         };
         
         set({
@@ -428,7 +428,7 @@ export const useCircuitStore = create<CircuitStore>()(
         stopWireDrawing();
       },
       
-      setWireColor: (color) => set({ selectedWireColor: color }),
+      setSelectedColor: (color) => set({ selectedColor: color }),
       
       removeWire: (wireId) => {
         set((state) => ({
@@ -478,10 +478,10 @@ export const useCircuitStore = create<CircuitStore>()(
             y: (firstNode.canvasPosition.y + lastNode.canvasPosition.y) / 2,
           };
           
-          // Get default component state, inject selectedWireColor for LED
+          // Get default component state, inject selectedColor for LED
           let componentState = getDefaultComponentState(state.placementComponent);
           if (state.placementComponent === 'led') {
-            componentState = { ...componentState, color: state.selectedWireColor } as LEDState;
+            componentState = { ...componentState, color: state.selectedColor } as LEDState;
           }
           
           const newComponent: CircuitComponent = {
@@ -699,7 +699,7 @@ export const useCircuitStore = create<CircuitStore>()(
         const serialized = persisted as SerializedState | null;
         
         if (!serialized || !serialized.version) {
-          console.log('[VBL] No valid stored state, starting fresh');
+          // No valid stored state, starting fresh
           return current;
         }
 
@@ -787,7 +787,7 @@ export function clearVBLStorage(): void {
     localStorage.removeItem(STORAGE_KEYS.CURRENT_CIRCUIT);
     localStorage.removeItem(STORAGE_KEYS.SAVED_CIRCUITS);
     localStorage.removeItem(STORAGE_KEYS.PREFERENCES);
-    console.log('[VBL] Storage cleared successfully');
+    // Storage cleared successfully
   } catch (e) {
     console.error('[VBL] Failed to clear storage:', e);
   }

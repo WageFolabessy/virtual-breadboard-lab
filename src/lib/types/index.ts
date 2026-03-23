@@ -164,3 +164,36 @@ export interface ComponentDragEvent {
   componentType: ComponentType;
   position: CanvasPosition;
 }
+
+// ---- Type-Safe Component State Getters ----
+// Eliminates unsafe inline `as` casts throughout the codebase.
+
+export function asBatteryState(state: ComponentState): BatteryState | null {
+  if (state && 'voltage' in state && 'isOn' in state) return state as BatteryState;
+  return null;
+}
+
+export function asLEDState(state: ComponentState): LEDState | null {
+  if (state && 'isLit' in state && 'color' in state) return state as LEDState;
+  return null;
+}
+
+export function asResistorState(state: ComponentState): ResistorState | null {
+  if (state && 'resistance' in state) return state as ResistorState;
+  return null;
+}
+
+export function asSwitchState(state: ComponentState): SwitchState | null {
+  if (state && 'isClosed' in state) return state as SwitchState;
+  return null;
+}
+
+export function asCapacitorState(state: ComponentState): CapacitorState | null {
+  if (state && 'capacitance' in state) return state as CapacitorState;
+  return null;
+}
+
+export function asBuzzerState(state: ComponentState): BuzzerState | null {
+  if (state && 'isActive' in state && 'frequency' in state) return state as BuzzerState;
+  return null;
+}

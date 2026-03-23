@@ -78,16 +78,15 @@ export const COLORS = {
   POWER_RAIL_BG: '#FEE2E2',
   GROUND_RAIL_BG: '#DBEAFE',
   
-  // Wire colors
-  WIRE_DEFAULT: '#374151',
-  WIRE_RED: '#DC2626',
-  WIRE_BLUE: '#2563EB',
-  WIRE_GREEN: '#16A34A',
-  WIRE_YELLOW: '#CA8A04',
-  WIRE_ORANGE: '#EA580C',
-  WIRE_PURPLE: '#9333EA',
-  WIRE_BLACK: '#1F2937',
-  WIRE_WHITE: '#F3F4F6',
+  // Palette colors (used for wires, LEDs, and other colorable components)
+  PALETTE_RED: '#DC2626',
+  PALETTE_BLUE: '#2563EB',
+  PALETTE_GREEN: '#16A34A',
+  PALETTE_YELLOW: '#CA8A04',
+  PALETTE_ORANGE: '#EA580C',
+  PALETTE_PURPLE: '#9333EA',
+  PALETTE_BLACK: '#1F2937',
+  PALETTE_WHITE: '#F3F4F6',
   
   // Component colors
   BATTERY_BODY: '#4A5568',
@@ -100,18 +99,25 @@ export const COLORS = {
   // UI colors
   SELECTION_HIGHLIGHT: '#3B82F6',
   DELETE_HIGHLIGHT: '#EF4444',
+  
+  // Voltage potential indicator colors
+  POSITIVE_POTENTIAL: 'rgba(239, 68, 68, 0.6)',
+  NEGATIVE_POTENTIAL: 'rgba(59, 130, 246, 0.6)',
+  
+  // Board detail colors
+  CENTER_GAP: '#D4CFC0',
 } as const;
 
-// ---- Wire Color Options ----
-export const WIRE_COLOR_OPTIONS = [
-  { name: 'Red', value: COLORS.WIRE_RED },
-  { name: 'Blue', value: COLORS.WIRE_BLUE },
-  { name: 'Green', value: COLORS.WIRE_GREEN },
-  { name: 'Yellow', value: COLORS.WIRE_YELLOW },
-  { name: 'Orange', value: COLORS.WIRE_ORANGE },
-  { name: 'Purple', value: COLORS.WIRE_PURPLE },
-  { name: 'Black', value: COLORS.WIRE_BLACK },
-  { name: 'White', value: COLORS.WIRE_WHITE },
+// ---- Color Palette Options (for wires, LEDs, and other components) ----
+export const COLOR_PALETTE = [
+  { name: 'Red', value: COLORS.PALETTE_RED },
+  { name: 'Blue', value: COLORS.PALETTE_BLUE },
+  { name: 'Green', value: COLORS.PALETTE_GREEN },
+  { name: 'Yellow', value: COLORS.PALETTE_YELLOW },
+  { name: 'Orange', value: COLORS.PALETTE_ORANGE },
+  { name: 'Purple', value: COLORS.PALETTE_PURPLE },
+  { name: 'Black', value: COLORS.PALETTE_BLACK },
+  { name: 'White', value: COLORS.PALETTE_WHITE },
 ] as const;
 
 // ---- Component Definitions ----
