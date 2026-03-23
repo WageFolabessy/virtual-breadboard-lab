@@ -4,9 +4,15 @@
 // WORKSPACE COMPONENT
 // Main client component that composes the simulator
 // ============================================
+// 
+// PERFORMANCE OPTIMIZATIONS:
+// 1. Wire preview uses isolated ref-based state (no React re-renders)
+// 2. Circuit evaluation ONLY runs on finalized actions (mouseUp)
+// 3. Memoized selectors prevent cascade re-renders
+// ============================================
 
-import React, { useEffect, useState, useRef, useCallback } from "react";
-import { useCircuitStore } from "@/lib/store/circuit-store";
+import React, { useEffect, useState, useRef, useCallback, useSyncExternalStore } from "react";
+import { useCircuitStore, getWireDrawingState, setWireDrawingPosition, subscribeToWireDrawing } from "@/lib/store/circuit-store";
 import { LEDState, BuzzerState, SwitchState } from "@/lib/types";
 import { RENDER } from "@/lib/constants";
 import { Breadboard } from "./Breadboard";
@@ -23,36 +29,72 @@ import {
 } from "./electronics";
 import { Header } from "@/components/Header";
 
+// ---- Isolated Wire Preview Component ----
+// Uses useSyncExternalStore to subscribe to ref-based state without triggering parent re-renders
+// CRITICAL: Does NOT receive nodes Map as prop - queries specific node via getState() to avoid re-renders
+const IsolatedWirePreview: React.FC<{ color: string }> = React.memo(({ color }) => {
+  const wireDrawing = useSyncExternalStore(
+    subscribeToWireDrawing,
+    getWireDrawingState,
+    getWireDrawingState
+  );
+
+  if (!wireDrawing.isDrawing || !wireDrawing.startNodeId) return null;
+
+  // Query the specific node directly from store - no prop dependency on entire Map
+  const startNode = useCircuitStore.getState().nodes.get(wireDrawing.startNodeId);
+  if (!startNode) return null;
+
+  return (
+    <WirePreview
+      startNode={startNode}
+      currentX={wireDrawing.currentX}
+      currentY={wireDrawing.currentY}
+      color={color}
+    />
+  );
+});
+IsolatedWirePreview.displayName = 'IsolatedWirePreview';
+
 export const Workspace: React.FC = () => {
-  const {
-    nodes,
-    components,
-    wires,
-    wireStartNodeId,
-    selectedWireColor,
-    selectedComponentId,
-    selectComponent,
-    removeWire,
-    simulation,
-    activeNodes,
-    initialize,
-    runSimulation,
-    toggleSwitch,
-  } = useCircuitStore();
+  // Selective subscriptions for state values only
+  const nodes = useCircuitStore((state) => state.nodes);
+  const components = useCircuitStore((state) => state.components);
+  const wires = useCircuitStore((state) => state.wires);
+  const wireStartNodeId = useCircuitStore((state) => state.wireStartNodeId);
+  const selectedWireColor = useCircuitStore((state) => state.selectedWireColor);
+  const selectedComponentId = useCircuitStore((state) => state.selectedComponentId);
+  const simulation = useCircuitStore((state) => state.simulation);
+  const activeNodes = useCircuitStore((state) => state.activeNodes);
 
   const svgRef = useRef<SVGSVGElement>(null);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // Initialize on mount
-  useEffect(() => {
-    initialize();
-    runSimulation();
-    const timer = setTimeout(() => setIsInitialized(true), 0);
-    return () => clearTimeout(timer);
-  }, [initialize, runSimulation]);
+  // Stable action callbacks using getState() to avoid dependency cycles
+  const selectComponent = useCallback((id: string | null) => {
+    useCircuitStore.getState().selectComponent(id);
+  }, []);
 
-  // Track mouse position for wire preview
+  const removeWire = useCallback((wireId: string) => {
+    useCircuitStore.getState().removeWire(wireId);
+  }, []);
+
+  const toggleSwitch = useCallback((componentId: string) => {
+    useCircuitStore.getState().toggleSwitch(componentId);
+  }, []);
+
+  // Initialize on mount - hydration handles state restoration, we just need to wait for it
+  // CRITICAL: Do NOT call initialize() - it would overwrite hydrated state
+  useEffect(() => {
+    // Zustand persist handles hydration automatically
+    // We just need to mark as initialized after a tick to avoid hydration mismatch
+    const timer = setTimeout(() => {
+      setIsInitialized(true);
+    }, 0);
+    return () => clearTimeout(timer);
+  }, []); // Empty deps - only run once on mount
+
+  // Track mouse position for wire preview - uses isolated state (no component re-render)
   const handleMouseMove = useCallback(
     (e: React.MouseEvent<SVGSVGElement>) => {
       if (!svgRef.current || !wireStartNodeId) return;
@@ -60,18 +102,16 @@ export const Workspace: React.FC = () => {
       const rect = svgRef.current.getBoundingClientRect();
       const x = e.clientX - rect.left;
       const y = e.clientY - rect.top;
-      setMousePos({ x, y });
+      // Update isolated wire drawing state (does NOT trigger React re-render)
+      setWireDrawingPosition(x, y);
     },
-    [wireStartNodeId],
+    [wireStartNodeId]
   );
 
   // Handle click outside components to deselect
   const handleSvgClick = useCallback(() => {
     selectComponent(null);
   }, [selectComponent]);
-
-  // Get wire start node for preview
-  const wireStartNode = wireStartNodeId ? nodes.get(wireStartNodeId) : null;
 
   // Check if component is in active circuit
   const isComponentActive = useCallback(
@@ -144,15 +184,8 @@ export const Workspace: React.FC = () => {
                   );
                 })}
 
-                {/* Wire Preview */}
-                {wireStartNode && (
-                  <WirePreview
-                    startNode={wireStartNode}
-                    currentX={mousePos.x}
-                    currentY={mousePos.y}
-                    color={selectedWireColor}
-                  />
-                )}
+                {/* Wire Preview - Uses isolated state for performance */}
+                <IsolatedWirePreview color={selectedWireColor} />
               </g>
 
               {/* Components Layer */}

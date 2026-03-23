@@ -4,42 +4,82 @@
 // BREADBOARD SVG COMPONENT
 // Renders the breadboard grid with interactive nodes
 // ============================================
+//
+// PERFORMANCE OPTIMIZATIONS:
+// 1. Node components receive handlers as props (no internal useCircuitStore)
+// 2. Hover state uses native DOM manipulation (no React re-render)
+// 3. Parent component passes stable callbacks
+// 4. Uses useShallow for Set/Map selectors to avoid reference-change re-renders
+// ============================================
 
-import React, { useMemo, useCallback } from 'react';
+import React, { useMemo, useCallback, useRef } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useCircuitStore } from '@/lib/store/circuit-store';
-import { BreadboardNode } from '@/lib/types';
+import { BreadboardNode, ToolType } from '@/lib/types';
 import { BREADBOARD, RENDER, COLORS } from '@/lib/constants';
 
 // ---- Node Component ----
+// CRITICAL: No useCircuitStore inside this component - receives everything via props
 interface NodeProps {
   node: BreadboardNode;
   isActive: boolean;
-  isHovered: boolean;
   isWireStart: boolean;
   isPlacementTarget: boolean;
+  selectedTool: ToolType;
+  onNodeClick: (nodeId: string) => void;
 }
 
 const BreadboardNodeComponent: React.FC<NodeProps> = React.memo(
-  ({ node, isActive, isHovered, isWireStart, isPlacementTarget }) => {
-    const { handleNodeClick, setHoveredNode, selectedTool } = useCircuitStore();
+  ({ node, isActive, isWireStart, isPlacementTarget, selectedTool, onNodeClick }) => {
+    // Use refs for hover state to avoid re-renders
+    const circleRef = useRef<SVGCircleElement>(null);
 
     const handleClick = useCallback(
       (e: React.MouseEvent) => {
         e.stopPropagation();
-        handleNodeClick(node.id);
+        onNodeClick(node.id);
       },
-      [handleNodeClick, node.id]
+      [onNodeClick, node.id]
     );
 
+    // Use native DOM for hover effects (no React re-render)
     const handleMouseEnter = useCallback(() => {
-      setHoveredNode(node.id);
-    }, [setHoveredNode, node.id]);
+      if (circleRef.current) {
+        circleRef.current.setAttribute('r', String(RENDER.NODE_HOVER_RADIUS));
+        circleRef.current.setAttribute('stroke', '#fff');
+        circleRef.current.setAttribute('stroke-width', '1.5');
+        // Update fill for hover
+        if (!node.isOccupied && !isActive && !isWireStart && !isPlacementTarget) {
+          circleRef.current.setAttribute('fill', COLORS.NODE_HOVER);
+        }
+      }
+    }, [node.isOccupied, isActive, isWireStart, isPlacementTarget]);
 
     const handleMouseLeave = useCallback(() => {
-      setHoveredNode(null);
-    }, [setHoveredNode]);
+      if (circleRef.current) {
+        circleRef.current.setAttribute('r', String(RENDER.NODE_RADIUS));
+        circleRef.current.setAttribute('stroke', 'none');
+        circleRef.current.setAttribute('stroke-width', '0');
+        // Restore original fill
+        let fillColor: string = COLORS.NODE_EMPTY;
+        if (node.isOccupied) {
+          fillColor = COLORS.NODE_OCCUPIED;
+        } else if (isActive) {
+          fillColor = COLORS.NODE_ACTIVE;
+        } else if (isWireStart) {
+          fillColor = COLORS.SELECTION_HIGHLIGHT;
+        } else if (isPlacementTarget) {
+          fillColor = COLORS.WIRE_GREEN;
+        } else if (node.stripType === 'power-rail') {
+          fillColor = COLORS.POWER_RAIL;
+        } else if (node.stripType === 'ground-rail') {
+          fillColor = COLORS.GROUND_RAIL;
+        }
+        circleRef.current.setAttribute('fill', fillColor);
+      }
+    }, [node.isOccupied, node.stripType, isActive, isWireStart, isPlacementTarget]);
 
-    // Determine node color
+    // Determine node color (initial render only)
     let fillColor: string = COLORS.NODE_EMPTY;
     
     if (node.isOccupied) {
@@ -50,29 +90,28 @@ const BreadboardNodeComponent: React.FC<NodeProps> = React.memo(
       fillColor = COLORS.SELECTION_HIGHLIGHT;
     } else if (isPlacementTarget) {
       fillColor = COLORS.WIRE_GREEN;
-    } else if (isHovered) {
-      fillColor = COLORS.NODE_HOVER;
     } else if (node.stripType === 'power-rail') {
       fillColor = COLORS.POWER_RAIL;
     } else if (node.stripType === 'ground-rail') {
       fillColor = COLORS.GROUND_RAIL;
     }
 
-    const radius = isHovered || isWireStart ? RENDER.NODE_HOVER_RADIUS : RENDER.NODE_RADIUS;
+    const radius = isWireStart ? RENDER.NODE_HOVER_RADIUS : RENDER.NODE_RADIUS;
     const cursor = selectedTool === 'select' ? 'pointer' : 'crosshair';
 
     return (
       <circle
+        ref={circleRef}
         cx={node.canvasPosition.x}
         cy={node.canvasPosition.y}
         r={radius}
         fill={fillColor}
-        stroke={isHovered || isWireStart ? '#fff' : 'none'}
-        strokeWidth={isHovered || isWireStart ? 1.5 : 0}
+        stroke={isWireStart ? '#fff' : 'none'}
+        strokeWidth={isWireStart ? 1.5 : 0}
         onClick={handleClick}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        style={{ cursor, transition: 'all 0.1s ease' }}
+        style={{ cursor, transition: 'fill 0.1s ease' }}
       />
     );
   }
@@ -144,8 +183,22 @@ const ColNumber: React.FC<ColNumberProps> = ({ col, x, y }) => (
 
 // ---- Main Breadboard Component ----
 export const Breadboard: React.FC = () => {
-  const { nodes, activeNodes, hoveredNodeId, wireStartNodeId, placementPins } =
-    useCircuitStore();
+  // Use a single shallow-compared selector for all state to minimize subscriptions
+  // and prevent re-renders when references change but content is the same
+  const { nodes, activeNodes, wireStartNodeId, placementPins, selectedTool } = useCircuitStore(
+    useShallow((state) => ({
+      nodes: state.nodes,
+      activeNodes: state.activeNodes,
+      wireStartNodeId: state.wireStartNodeId,
+      placementPins: state.placementPins,
+      selectedTool: state.selectedTool,
+    }))
+  );
+
+  // Stable callback reference for node clicks - uses getState() to avoid dependency cycles
+  const onNodeClick = useCallback((nodeId: string) => {
+    useCircuitStore.getState().handleNodeClick(nodeId);
+  }, []);
 
   // Convert nodes Map to array for rendering
   const nodesArray = useMemo(() => Array.from(nodes.values()), [nodes]);
@@ -359,9 +412,10 @@ export const Breadboard: React.FC = () => {
           key={node.id}
           node={node}
           isActive={activeNodes.has(node.id)}
-          isHovered={hoveredNodeId === node.id}
           isWireStart={wireStartNodeId === node.id}
           isPlacementTarget={placementPins.includes(node.id)}
+          selectedTool={selectedTool}
+          onNodeClick={onNodeClick}
         />
       ))}
 
@@ -371,9 +425,10 @@ export const Breadboard: React.FC = () => {
           key={node.id}
           node={node}
           isActive={activeNodes.has(node.id)}
-          isHovered={hoveredNodeId === node.id}
           isWireStart={wireStartNodeId === node.id}
           isPlacementTarget={placementPins.includes(node.id)}
+          selectedTool={selectedTool}
+          onNodeClick={onNodeClick}
         />
       ))}
     </svg>

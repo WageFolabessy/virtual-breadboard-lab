@@ -4,10 +4,16 @@
 // WIRE SVG COMPONENT
 // Renders wires connecting breadboard nodes
 // ============================================
+// 
+// VISUAL SEMANTICS:
+// Wire color is ALWAYS the user's chosen color (wire.color).
+// Wire insulation does not change color with current flow.
+// Active circuit feedback comes from LED glow and status badge.
+// ============================================
 
 import React from 'react';
 import { Wire as WireType, BreadboardNode } from '@/lib/types';
-import { RENDER, COLORS } from '@/lib/constants';
+import { RENDER } from '@/lib/constants';
 
 interface WireProps {
   wire: WireType;
@@ -49,6 +55,10 @@ export const Wire: React.FC<WireProps> = ({ wire, nodes, isActive, onDelete }) =
   // Path for curved wire
   const pathD = `M ${x1} ${y1} Q ${controlX} ${controlY} ${x2} ${y2}`;
 
+  // FIXED: Wire ALWAYS uses its assigned color - no conditional override
+  // Active state is shown via subtle glow effect, not color change
+  const wireColor = wire.color;
+
   return (
     <g className="wire-group">
       {/* Wire shadow */}
@@ -61,27 +71,26 @@ export const Wire: React.FC<WireProps> = ({ wire, nodes, isActive, onDelete }) =
         transform="translate(1, 1)"
       />
 
-      {/* Main wire */}
-      <path
-        d={pathD}
-        fill="none"
-        stroke={isActive ? COLORS.NODE_ACTIVE : wire.color}
-        strokeWidth={RENDER.WIRE_WIDTH}
-        strokeLinecap="round"
-        className="transition-all duration-200"
-      />
-
-      {/* Wire highlight (for active state) */}
+      {/* Active glow effect (subtle, does not change wire color) */}
       {isActive && (
         <path
           d={pathD}
           fill="none"
-          stroke={COLORS.NODE_ACTIVE}
-          strokeWidth={RENDER.WIRE_WIDTH + 2}
+          stroke="rgba(255,255,255,0.4)"
+          strokeWidth={RENDER.WIRE_WIDTH + 4}
           strokeLinecap="round"
-          opacity={0.3}
+          opacity={0.5}
         />
       )}
+
+      {/* Main wire - ALWAYS uses user's chosen color */}
+      <path
+        d={pathD}
+        fill="none"
+        stroke={wireColor}
+        strokeWidth={RENDER.WIRE_WIDTH}
+        strokeLinecap="round"
+      />
 
       {/* Invisible wider path for easier click detection */}
       <path
@@ -97,18 +106,18 @@ export const Wire: React.FC<WireProps> = ({ wire, nodes, isActive, onDelete }) =
         }}
       />
 
-      {/* Wire endpoints */}
+      {/* Wire endpoints - ALWAYS use wire's color */}
       <circle
         cx={x1}
         cy={y1}
         r={3}
-        fill={isActive ? COLORS.NODE_ACTIVE : wire.color}
+        fill={wireColor}
       />
       <circle
         cx={x2}
         cy={y2}
         r={3}
-        fill={isActive ? COLORS.NODE_ACTIVE : wire.color}
+        fill={wireColor}
       />
     </g>
   );

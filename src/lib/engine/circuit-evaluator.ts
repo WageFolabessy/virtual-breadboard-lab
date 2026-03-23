@@ -1,17 +1,19 @@
 // ============================================
-// CIRCUIT EVALUATOR ENGINE v3.0
-// Proper physics-based graph traversal algorithm
+// CIRCUIT EVALUATOR ENGINE v4.0
+// 2-Way Flood Fill Algorithm for Parallel Circuits
 // ============================================
 // 
-// PHYSICS RULES ENFORCED:
-// 1. A circuit is ONLY complete if there's an unbroken loop from Battery+ through
-//    components back to Battery-
-// 2. Short Circuit Detection: Direct path from + to - WITHOUT passing through load = DANGER
-// 3. LED Polarity: Current must flow Anode(+) → Cathode(-), reverse = OPEN circuit
-// 4. Breadboard Rules:
-//    - Power rails: horizontal connections across all columns
-//    - Terminal strips: vertical connections (A-E per column, F-J per column)
-//    - NO connection across middle trench (E to F) without wire/component
+// ELECTRICAL REALITY:
+// 1. Electricity flows through ALL available paths simultaneously (parallel circuits)
+// 2. A component is active if its input touches POSITIVE and output touches NEGATIVE
+// 3. Short Circuit: Direct wire path from + to - without any load
+// 4. LED Polarity: Anode must be on positive side, Cathode on negative side
+// 
+// ALGORITHM:
+// Step 1: Flood from Battery+ → find all "positiveReachable" nodes
+// Step 2: Flood from Battery- → find all "negativeReachable" nodes
+// Step 3: For each component, check if pins span both sets
+// Step 4: Detect short circuits (wire-only path from + to -)
 // ============================================
 
 import {
@@ -23,9 +25,7 @@ import {
   SwitchState,
   BuzzerState,
   ComponentState,
-  PinType,
 } from '../types';
-
 
 // ---- Circuit Status Types ----
 export type CircuitStatus = 'incomplete' | 'complete' | 'short-circuit';
@@ -40,113 +40,269 @@ export interface SimulationResultV2 {
   message: string;
 }
 
-// ---- Component Pin Mapping ----
-// Maps nodeId -> { componentId, pinType, component }
-interface PinMapping {
-  componentId: string;
-  pinType: PinType;
-  component: CircuitComponent;
+// Maximum iterations for flood fill (safeguard)
+const MAX_FLOOD_ITERATIONS = 5000;
+
+/**
+ * Build connection group cache for O(1) lookups
+ */
+function buildConnectionGroupCache(nodes: Map<string, BreadboardNode>): Map<string, string[]> {
+  const cache = new Map<string, string[]>();
+  const groupToNodes = new Map<string, string[]>();
+  
+  nodes.forEach((node) => {
+    if (!groupToNodes.has(node.connectionGroup)) {
+      groupToNodes.set(node.connectionGroup, []);
+    }
+    groupToNodes.get(node.connectionGroup)!.push(node.id);
+  });
+  
+  nodes.forEach((node) => {
+    cache.set(node.id, groupToNodes.get(node.connectionGroup) || [node.id]);
+  });
+  
+  return cache;
 }
 
 /**
- * Check if a component is a "load" (provides resistance/consumes power)
+ * Build wire adjacency map - which nodes are directly connected by wires
  */
-function isLoadComponent(componentType: string): boolean {
-  return ['led', 'resistor', 'buzzer', 'capacitor'].includes(componentType);
-}
-
-/**
- * Check if a component conducts electricity in its current state
- */
-function componentConducts(component: CircuitComponent): boolean {
-  switch (component.type) {
-    case 'switch':
-      return (component.state as SwitchState).isClosed;
-    case 'battery':
-      return (component.state as BatteryState).isOn;
-    default:
-      return true;
+function buildWireAdjacency(
+  wires: Wire[],
+  cache: Map<string, string[]>
+): Map<string, Set<string>> {
+  const adjacency = new Map<string, Set<string>>();
+  
+  const addEdge = (from: string, to: string) => {
+    if (from === to) return;
+    if (!adjacency.has(from)) adjacency.set(from, new Set());
+    if (!adjacency.has(to)) adjacency.set(to, new Set());
+    adjacency.get(from)!.add(to);
+    adjacency.get(to)!.add(from);
+  };
+  
+  // Add wire connections (including all nodes in connection groups)
+  for (const wire of wires) {
+    const startGroup = cache.get(wire.startNodeId) || [wire.startNodeId];
+    const endGroup = cache.get(wire.endNodeId) || [wire.endNodeId];
+    
+    for (const s of startGroup) {
+      for (const e of endGroup) {
+        addEdge(s, e);
+      }
+    }
   }
+  
+  return adjacency;
 }
 
 /**
- * Build a map of nodeId -> pin information for quick lookup
+ * Build component adjacency - maps node IDs to components that touch them
  */
-function buildPinMap(
+interface ComponentConnection {
+  component: CircuitComponent;
+  pinType: string;
+  otherPinNodeIds: string[];
+}
+
+function buildComponentAdjacency(
   components: CircuitComponent[],
-  nodes: Map<string, BreadboardNode>
-): Map<string, PinMapping[]> {
-  const pinMap = new Map<string, PinMapping[]>();
+  cache: Map<string, string[]>
+): Map<string, ComponentConnection[]> {
+  const adjacency = new Map<string, ComponentConnection[]>();
   
   for (const component of components) {
-    if (component.type === 'battery') continue; // Skip battery in pin map
+    if (component.type === 'battery') continue; // Battery handled separately
     
     for (const pin of component.pins) {
       if (!pin.connectedNodeId) continue;
       
-      // Get all nodes in the same connection group
-      const connectedNodes = getInternallyConnectedNodeIds(pin.connectedNodeId, nodes);
+      // Find the other pin(s) of this component
+      const otherPins = component.pins.filter(p => p.id !== pin.id && p.connectedNodeId);
+      const otherPinNodeIds = otherPins.flatMap(p => cache.get(p.connectedNodeId!) || [p.connectedNodeId!]);
       
-      for (const nodeId of connectedNodes) {
-        if (!pinMap.has(nodeId)) {
-          pinMap.set(nodeId, []);
+      // Map all nodes in this pin's connection group to the component
+      const pinGroup = cache.get(pin.connectedNodeId) || [pin.connectedNodeId];
+      for (const nodeId of pinGroup) {
+        if (!adjacency.has(nodeId)) {
+          adjacency.set(nodeId, []);
         }
-        pinMap.get(nodeId)!.push({
-          componentId: component.id,
-          pinType: pin.pinType,
+        adjacency.get(nodeId)!.push({
           component,
+          pinType: pin.pinType,
+          otherPinNodeIds,
         });
       }
     }
   }
   
-  return pinMap;
+  return adjacency;
 }
 
 /**
- * Get all nodes in the same internal connection group
+ * Check if a component conducts in its current state
  */
-function getInternallyConnectedNodeIds(
-  nodeId: string,
-  nodes: Map<string, BreadboardNode>
-): string[] {
-  const node = nodes.get(nodeId);
-  if (!node) return [nodeId];
+function componentConducts(component: CircuitComponent): boolean {
+  if (component.type === 'switch') {
+    return (component.state as SwitchState).isClosed;
+  }
+  return true;
+}
+
+/**
+ * Check if a component is a load (consumes power)
+ */
+function isLoadComponent(type: string): boolean {
+  return ['led', 'resistor', 'buzzer', 'capacitor'].includes(type);
+}
+
+/**
+ * FLOOD FILL from a starting set of nodes
+ * Traverses through wires and conducting components
+ * Returns all reachable node IDs
+ * 
+ * @param direction - 'forward' (from +) respects LED polarity, 'backward' (from -) reverses it
+ */
+function floodFill(
+  startNodes: Set<string>,
+  wireAdjacency: Map<string, Set<string>>,
+  componentAdjacency: Map<string, ComponentConnection[]>,
+  cache: Map<string, string[]>,
+  direction: 'forward' | 'backward'
+): Set<string> {
+  const reachable = new Set<string>();
+  const visited = new Set<string>();
+  const queue: string[] = [];
   
-  const connected: string[] = [];
-  nodes.forEach((n) => {
-    if (n.connectionGroup === node.connectionGroup) {
-      connected.push(n.id);
+  // Initialize with start nodes and their connection groups
+  for (const startNode of startNodes) {
+    const group = cache.get(startNode) || [startNode];
+    for (const nodeId of group) {
+      if (!visited.has(nodeId)) {
+        visited.add(nodeId);
+        reachable.add(nodeId);
+        queue.push(nodeId);
+      }
     }
-  });
+  }
   
-  return connected;
+  let iterations = 0;
+  
+  while (queue.length > 0) {
+    iterations++;
+    if (iterations > MAX_FLOOD_ITERATIONS) {
+      console.error('[VBL] Flood fill exceeded max iterations');
+      break;
+    }
+    
+    const currentNode = queue.shift()!;
+    
+    // === TRAVERSE THROUGH WIRES ===
+    const wireNeighbors = wireAdjacency.get(currentNode) || new Set();
+    for (const neighbor of wireNeighbors) {
+      // Mark entire connection group
+      const neighborGroup = cache.get(neighbor) || [neighbor];
+      for (const nodeId of neighborGroup) {
+        if (!visited.has(nodeId)) {
+          visited.add(nodeId);
+          reachable.add(nodeId);
+          queue.push(nodeId);
+        }
+      }
+    }
+    
+    // === TRAVERSE THROUGH COMPONENTS ===
+    const componentConnections = componentAdjacency.get(currentNode) || [];
+    for (const conn of componentConnections) {
+      const { component, pinType, otherPinNodeIds } = conn;
+      
+      // Skip non-conducting components (open switches)
+      if (!componentConducts(component)) continue;
+      
+      // LED POLARITY CHECK
+      if (component.type === 'led') {
+        // Forward (from +): Can only ENTER through anode, EXIT through cathode
+        // Backward (from -): Can only ENTER through cathode, EXIT through anode
+        if (direction === 'forward' && pinType !== 'anode') continue;
+        if (direction === 'backward' && pinType !== 'cathode') continue;
+      }
+      
+      // Add all nodes on the other side of the component
+      for (const otherNodeId of otherPinNodeIds) {
+        const otherGroup = cache.get(otherNodeId) || [otherNodeId];
+        for (const nodeId of otherGroup) {
+          if (!visited.has(nodeId)) {
+            visited.add(nodeId);
+            reachable.add(nodeId);
+            queue.push(nodeId);
+          }
+        }
+      }
+    }
+  }
+  
+  return reachable;
 }
 
 /**
- * Get the "other" pin of a 2-pin component given one pin
+ * Check for SHORT CIRCUIT: Direct wire path from + to - without load
  */
-function getOtherPin(component: CircuitComponent, currentPinType: PinType): { pinType: PinType; nodeId: string | null } | null {
-  const otherPin = component.pins.find(p => p.pinType !== currentPinType);
-  if (!otherPin) return null;
-  return { pinType: otherPin.pinType, nodeId: otherPin.connectedNodeId };
+function checkShortCircuit(
+  positiveStartNodes: Set<string>,
+  negativeStartNodes: Set<string>,
+  wireAdjacency: Map<string, Set<string>>,
+  cache: Map<string, string[]>
+): { isShort: boolean; path: string[] } {
+  // BFS through WIRES ONLY (no components) to find direct path
+  const visited = new Set<string>();
+  const queue: { nodeId: string; path: string[] }[] = [];
+  
+  // Start from positive nodes
+  for (const startNode of positiveStartNodes) {
+    const group = cache.get(startNode) || [startNode];
+    for (const nodeId of group) {
+      if (!visited.has(nodeId)) {
+        visited.add(nodeId);
+        queue.push({ nodeId, path: [nodeId] });
+      }
+    }
+  }
+  
+  let iterations = 0;
+  
+  while (queue.length > 0) {
+    iterations++;
+    if (iterations > MAX_FLOOD_ITERATIONS) break;
+    
+    const { nodeId, path } = queue.shift()!;
+    
+    // Check if we reached negative terminal via wires only
+    if (negativeStartNodes.has(nodeId)) {
+      return { isShort: true, path };
+    }
+    
+    // Traverse ONLY through wires (not components)
+    const wireNeighbors = wireAdjacency.get(nodeId) || new Set();
+    for (const neighbor of wireNeighbors) {
+      const neighborGroup = cache.get(neighbor) || [neighbor];
+      for (const groupNode of neighborGroup) {
+        if (!visited.has(groupNode)) {
+          visited.add(groupNode);
+          queue.push({ nodeId: groupNode, path: [...path, groupNode] });
+        }
+      }
+    }
+  }
+  
+  return { isShort: false, path: [] };
 }
 
 /**
- * Check if current can flow through LED in the given direction
- * Current must enter Anode and exit Cathode
- */
-function canCurrentFlowThroughLED(enteringPinType: PinType): boolean {
-  // Current MUST enter through anode
-  return enteringPinType === 'anode';
-}
-
-/**
- * Find battery and its terminal nodes
+ * Find battery and its terminal node IDs
  */
 function findBattery(
   components: CircuitComponent[],
-  nodes: Map<string, BreadboardNode>
+  cache: Map<string, string[]>
 ): {
   battery: CircuitComponent | null;
   positiveNodes: Set<string>;
@@ -165,12 +321,12 @@ function findBattery(
   
   const positiveNodes = new Set(
     positivePin?.connectedNodeId
-      ? getInternallyConnectedNodeIds(positivePin.connectedNodeId, nodes)
+      ? (cache.get(positivePin.connectedNodeId) || [positivePin.connectedNodeId])
       : []
   );
   const negativeNodes = new Set(
     negativePin?.connectedNodeId
-      ? getInternallyConnectedNodeIds(negativePin.connectedNodeId, nodes)
+      ? (cache.get(negativePin.connectedNodeId) || [negativePin.connectedNodeId])
       : []
   );
   
@@ -178,233 +334,17 @@ function findBattery(
 }
 
 /**
- * Build wire adjacency - which nodes are connected by wires
- */
-function buildWireAdjacency(
-  wires: Wire[],
-  nodes: Map<string, BreadboardNode>
-): Map<string, Set<string>> {
-  const adjacency = new Map<string, Set<string>>();
-  
-  const addEdge = (from: string, to: string) => {
-    if (!adjacency.has(from)) adjacency.set(from, new Set());
-    if (!adjacency.has(to)) adjacency.set(to, new Set());
-    adjacency.get(from)!.add(to);
-    adjacency.get(to)!.add(from);
-  };
-  
-  // Add wire connections
-  for (const wire of wires) {
-    // Direct wire connection
-    addEdge(wire.startNodeId, wire.endNodeId);
-    
-    // Also connect all nodes in same connection groups
-    const startGroup = getInternallyConnectedNodeIds(wire.startNodeId, nodes);
-    const endGroup = getInternallyConnectedNodeIds(wire.endNodeId, nodes);
-    
-    for (const s of startGroup) {
-      for (const e of endGroup) {
-        addEdge(s, e);
-      }
-    }
-  }
-  
-  // Add internal breadboard connections
-  const processedGroups = new Set<string>();
-  nodes.forEach((node) => {
-    if (!processedGroups.has(node.connectionGroup)) {
-      processedGroups.add(node.connectionGroup);
-      const groupNodes = getInternallyConnectedNodeIds(node.id, nodes);
-      for (let i = 0; i < groupNodes.length; i++) {
-        for (let j = i + 1; j < groupNodes.length; j++) {
-          addEdge(groupNodes[i], groupNodes[j]);
-        }
-      }
-    }
-  });
-  
-  return adjacency;
-}
-
-/**
- * DFS to find path from positive to negative terminal
- * Tracks: path, whether load was encountered, components traversed
- */
-interface PathResult {
-  found: boolean;
-  path: string[];
-  hasLoad: boolean;
-  componentsInPath: Set<string>;
-  blockedByPolarity: boolean;
-}
-
-function findCircuitPath(
-  startNodes: Set<string>,
-  targetNodes: Set<string>,
-  wireAdjacency: Map<string, Set<string>>,
-  pinMap: Map<string, PinMapping[]>,
-  nodes: Map<string, BreadboardNode>
-): PathResult {
-  // Track visited states: nodeId + set of components already used
-  // This allows finding paths through different components
-  
-  interface QueueItem {
-    nodeId: string;
-    path: string[];
-    hasLoad: boolean;
-    usedComponents: Set<string>;
-    visitedNodes: Set<string>;
-  }
-  
-  const queue: QueueItem[] = [];
-  
-  // Initialize with all start nodes
-  for (const startNode of startNodes) {
-    queue.push({
-      nodeId: startNode,
-      path: [startNode],
-      hasLoad: false,
-      usedComponents: new Set(),
-      visitedNodes: new Set([startNode]),
-    });
-  }
-  
-  // Track best results
-  let bestPathWithLoad: PathResult | null = null;
-  let bestPathWithoutLoad: PathResult | null = null;
-  let blockedByPolarity = false;
-  
-  while (queue.length > 0) {
-    const current = queue.shift()!;
-    const { nodeId, path, hasLoad, usedComponents, visitedNodes } = current;
-    
-    // Check if we reached target
-    if (targetNodes.has(nodeId)) {
-      const result: PathResult = {
-        found: true,
-        path,
-        hasLoad,
-        componentsInPath: usedComponents,
-        blockedByPolarity: false,
-      };
-      
-      if (hasLoad && !bestPathWithLoad) {
-        bestPathWithLoad = result;
-      } else if (!hasLoad && !bestPathWithoutLoad) {
-        bestPathWithoutLoad = result;
-      }
-      
-      // Keep searching for better paths
-      continue;
-    }
-    
-    // Expand through wires and internal connections
-    const wireNeighbors = wireAdjacency.get(nodeId) || new Set();
-    
-    for (const neighbor of wireNeighbors) {
-      if (visitedNodes.has(neighbor)) continue;
-      
-      const newVisited = new Set(visitedNodes);
-      newVisited.add(neighbor);
-      
-      // Add all nodes in same connection group to visited
-      const neighborGroup = getInternallyConnectedNodeIds(neighbor, nodes);
-      for (const ng of neighborGroup) {
-        newVisited.add(ng);
-      }
-      
-      queue.push({
-        nodeId: neighbor,
-        path: [...path, neighbor],
-        hasLoad,
-        usedComponents: new Set(usedComponents),
-        visitedNodes: newVisited,
-      });
-    }
-    
-    // Expand through components
-    const pinsAtNode = pinMap.get(nodeId) || [];
-    
-    for (const pinInfo of pinsAtNode) {
-      const { componentId, pinType, component } = pinInfo;
-      
-      // Skip if component already used in this path
-      if (usedComponents.has(componentId)) continue;
-      
-      // Skip if component doesn't conduct
-      if (!componentConducts(component)) continue;
-      
-      // For LED, check polarity - current must ENTER through anode
-      if (component.type === 'led') {
-        if (!canCurrentFlowThroughLED(pinType)) {
-          // Current trying to enter through cathode - blocked!
-          blockedByPolarity = true;
-          continue;
-        }
-      }
-      
-      // Get the other end of the component
-      const otherPin = getOtherPin(component, pinType);
-      if (!otherPin || !otherPin.nodeId) continue;
-      
-      // Get all nodes connected to the other pin
-      const otherNodes = getInternallyConnectedNodeIds(otherPin.nodeId, nodes);
-      
-      for (const otherNode of otherNodes) {
-        if (visitedNodes.has(otherNode)) continue;
-        
-        const newVisited = new Set(visitedNodes);
-        newVisited.add(otherNode);
-        
-        // Add all nodes in connection group
-        for (const on of otherNodes) {
-          newVisited.add(on);
-        }
-        
-        const newUsedComponents = new Set(usedComponents);
-        newUsedComponents.add(componentId);
-        
-        const newHasLoad = hasLoad || isLoadComponent(component.type);
-        
-        queue.push({
-          nodeId: otherNode,
-          path: [...path, otherNode],
-          hasLoad: newHasLoad,
-          usedComponents: newUsedComponents,
-          visitedNodes: newVisited,
-        });
-      }
-    }
-  }
-  
-  // Return best result - prefer path with load
-  if (bestPathWithLoad) {
-    return bestPathWithLoad;
-  }
-  
-  if (bestPathWithoutLoad) {
-    return bestPathWithoutLoad;
-  }
-  
-  return {
-    found: false,
-    path: [],
-    hasLoad: false,
-    componentsInPath: new Set(),
-    blockedByPolarity,
-  };
-}
-
-/**
- * Main circuit evaluation function
+ * MAIN CIRCUIT EVALUATION - 2-Way Flood Fill Algorithm
+ * 
+ * This evaluates ALL components simultaneously, supporting parallel circuits.
  */
 export function evaluateCircuit(
   nodes: Map<string, BreadboardNode>,
   components: CircuitComponent[],
   wires: Wire[]
 ): SimulationResultV2 {
-  // Default result - incomplete circuit
-  const defaultResult: SimulationResultV2 = {
+  // Default result
+  const result: SimulationResultV2 = {
     status: 'incomplete',
     isCircuitComplete: false,
     activePath: [],
@@ -413,103 +353,181 @@ export function evaluateCircuit(
     message: 'No complete circuit detected',
   };
   
-  // Initialize all component states to default (off)
-  components.forEach((component) => {
+  // Initialize all component states to OFF
+  for (const component of components) {
     if (component.type === 'led') {
-      defaultResult.componentStates.set(component.id, {
+      result.componentStates.set(component.id, {
         ...(component.state as LEDState),
         isLit: false,
       });
     } else if (component.type === 'buzzer') {
-      defaultResult.componentStates.set(component.id, {
+      result.componentStates.set(component.id, {
         ...(component.state as BuzzerState),
         isActive: false,
       });
     } else {
-      defaultResult.componentStates.set(component.id, component.state);
+      result.componentStates.set(component.id, component.state);
     }
-  });
+  }
+  
+  // Build caches
+  const connectionCache = buildConnectionGroupCache(nodes);
+  const wireAdjacency = buildWireAdjacency(wires, connectionCache);
+  const componentAdjacency = buildComponentAdjacency(components, connectionCache);
   
   // Find battery
-  const { battery, positiveNodes, negativeNodes } = findBattery(components, nodes);
+  const { battery, positiveNodes: batteryPositive, negativeNodes: batteryNegative } = 
+    findBattery(components, connectionCache);
   
   if (!battery) {
-    defaultResult.message = 'No power source (battery) found';
-    return defaultResult;
+    result.message = 'No power source (battery) found';
+    return result;
   }
   
-  if (positiveNodes.size === 0 || negativeNodes.size === 0) {
-    defaultResult.message = 'Battery not properly connected to breadboard';
-    defaultResult.powerSourceId = battery.id;
-    return defaultResult;
+  result.powerSourceId = battery.id;
+  
+  if (batteryPositive.size === 0 || batteryNegative.size === 0) {
+    result.message = 'Battery not properly connected to breadboard';
+    return result;
   }
   
-  defaultResult.powerSourceId = battery.id;
-  
-  // Build data structures
-  const pinMap = buildPinMap(components, nodes);
-  const wireAdjacency = buildWireAdjacency(wires, nodes);
-  
-  // Find path from positive to negative
-  const pathResult = findCircuitPath(
-    positiveNodes,
-    negativeNodes,
+  // === STEP 1: Check for SHORT CIRCUIT (wire-only path from + to -) ===
+  const shortCircuitCheck = checkShortCircuit(
+    batteryPositive,
+    batteryNegative,
     wireAdjacency,
-    pinMap,
-    nodes
+    connectionCache
   );
   
-  // No path found
-  if (!pathResult.found) {
-    if (pathResult.blockedByPolarity) {
-      defaultResult.message = 'Circuit blocked - LED connected with wrong polarity (current cannot enter cathode)';
-    } else {
-      defaultResult.message = 'Circuit is open - no complete path from + to -';
-    }
-    return defaultResult;
-  }
-  
-  // Path found but no load - SHORT CIRCUIT!
-  if (!pathResult.hasLoad) {
+  if (shortCircuitCheck.isShort) {
     return {
       status: 'short-circuit',
       isCircuitComplete: false,
-      activePath: pathResult.path,
+      activePath: shortCircuitCheck.path,
       powerSourceId: battery.id,
-      componentStates: new Map(defaultResult.componentStates),
-      shortCircuitPath: pathResult.path,
-      message: 'SHORT CIRCUIT! Direct path from + to - without any load (LED/resistor)',
+      componentStates: result.componentStates,
+      shortCircuitPath: shortCircuitCheck.path,
+      message: 'SHORT CIRCUIT! Direct wire path from + to - without any load',
     };
   }
   
-  // Circuit is complete with proper load!
-  const result: SimulationResultV2 = {
-    status: 'complete',
-    isCircuitComplete: true,
-    activePath: pathResult.path,
-    powerSourceId: battery.id,
-    componentStates: new Map(defaultResult.componentStates),
-    message: 'Circuit complete - current flowing',
-  };
+  // === STEP 2: FLOOD FILL from POSITIVE (forward direction) ===
+  const positiveReachable = floodFill(
+    batteryPositive,
+    wireAdjacency,
+    componentAdjacency,
+    connectionCache,
+    'forward'
+  );
   
-  // Update component states for components in the active path
-  for (const componentId of pathResult.componentsInPath) {
-    const component = components.find(c => c.id === componentId);
-    if (!component) continue;
+  // === STEP 3: FLOOD FILL from NEGATIVE (backward direction) ===
+  const negativeReachable = floodFill(
+    batteryNegative,
+    wireAdjacency,
+    componentAdjacency,
+    connectionCache,
+    'backward'
+  );
+  
+  // === STEP 4: EVALUATE EACH COMPONENT ===
+  // A component is ACTIVE if:
+  // - For LED: Anode is in positiveReachable AND Cathode is in negativeReachable
+  // - For other components: One pin in positiveReachable AND other pin in negativeReachable
+  
+  let hasActiveLoad = false;
+  const activeComponentIds: string[] = [];
+  const allActiveNodes = new Set<string>();
+  
+  for (const component of components) {
+    if (component.type === 'battery') continue;
+    if (!componentConducts(component)) continue;
+    
+    const pins = component.pins.filter(p => p.connectedNodeId);
+    if (pins.length < 2) continue;
+    
+    let isActive = false;
     
     if (component.type === 'led') {
-      result.componentStates.set(component.id, {
-        ...(component.state as LEDState),
-        isLit: true,
-      });
-    } else if (component.type === 'buzzer') {
-      result.componentStates.set(component.id, {
-        ...(component.state as BuzzerState),
-        isActive: true,
-      });
+      // LED: Check polarity - anode must be on positive side, cathode on negative
+      const anodePin = pins.find(p => p.pinType === 'anode');
+      const cathodePin = pins.find(p => p.pinType === 'cathode');
+      
+      if (anodePin?.connectedNodeId && cathodePin?.connectedNodeId) {
+        const anodeGroup = connectionCache.get(anodePin.connectedNodeId) || [anodePin.connectedNodeId];
+        const cathodeGroup = connectionCache.get(cathodePin.connectedNodeId) || [cathodePin.connectedNodeId];
+        
+        const anodeOnPositive = anodeGroup.some(n => positiveReachable.has(n));
+        const cathodeOnNegative = cathodeGroup.some(n => negativeReachable.has(n));
+        
+        isActive = anodeOnPositive && cathodeOnNegative;
+      }
+    } else {
+      // Other 2-pin components: One pin on positive, one on negative
+      const pin1 = pins[0];
+      const pin2 = pins[1];
+      
+      if (pin1.connectedNodeId && pin2.connectedNodeId) {
+        const pin1Group = connectionCache.get(pin1.connectedNodeId) || [pin1.connectedNodeId];
+        const pin2Group = connectionCache.get(pin2.connectedNodeId) || [pin2.connectedNodeId];
+        
+        const pin1OnPositive = pin1Group.some(n => positiveReachable.has(n));
+        const pin1OnNegative = pin1Group.some(n => negativeReachable.has(n));
+        const pin2OnPositive = pin2Group.some(n => positiveReachable.has(n));
+        const pin2OnNegative = pin2Group.some(n => negativeReachable.has(n));
+        
+        // Component is active if pins span both power domains
+        isActive = (pin1OnPositive && pin2OnNegative) || (pin1OnNegative && pin2OnPositive);
+      }
+    }
+    
+    if (isActive) {
+      activeComponentIds.push(component.id);
+      
+      // Add component's nodes to active set
+      for (const pin of pins) {
+        if (pin.connectedNodeId) {
+          const group = connectionCache.get(pin.connectedNodeId) || [pin.connectedNodeId];
+          group.forEach(n => allActiveNodes.add(n));
+        }
+      }
+      
+      // Update component state
+      if (component.type === 'led') {
+        result.componentStates.set(component.id, {
+          ...(component.state as LEDState),
+          isLit: true,
+        });
+        hasActiveLoad = true;
+      } else if (component.type === 'buzzer') {
+        result.componentStates.set(component.id, {
+          ...(component.state as BuzzerState),
+          isActive: true,
+        });
+        hasActiveLoad = true;
+      } else if (isLoadComponent(component.type)) {
+        hasActiveLoad = true;
+      }
     }
   }
   
+  // === STEP 5: DETERMINE CIRCUIT STATUS ===
+  if (hasActiveLoad) {
+    // Add all nodes from both flood fills to active path (for highlighting)
+    positiveReachable.forEach(n => allActiveNodes.add(n));
+    negativeReachable.forEach(n => allActiveNodes.add(n));
+    
+    return {
+      status: 'complete',
+      isCircuitComplete: true,
+      activePath: Array.from(allActiveNodes),
+      powerSourceId: battery.id,
+      componentStates: result.componentStates,
+      message: `Circuit complete - ${activeComponentIds.length} component(s) active`,
+    };
+  }
+  
+  // No active loads found
+  result.message = 'Circuit is open - no complete path through any load';
   return result;
 }
 
@@ -521,12 +539,13 @@ export function getActiveNodes(
   nodes: Map<string, BreadboardNode>
 ): Set<string> {
   const activeNodes = new Set<string>();
+  const cache = buildConnectionGroupCache(nodes);
   
-  path.forEach((nodeId) => {
+  for (const nodeId of path) {
     activeNodes.add(nodeId);
-    // Also add all internally connected nodes
-    getInternallyConnectedNodeIds(nodeId, nodes).forEach(id => activeNodes.add(id));
-  });
+    const group = cache.get(nodeId) || [];
+    group.forEach(id => activeNodes.add(id));
+  }
   
   return activeNodes;
 }
@@ -565,11 +584,14 @@ export function validateComponentPlacement(
   return { valid: true };
 }
 
-// Legacy export for backwards compatibility
+/**
+ * Legacy export for backwards compatibility
+ */
 export function buildCircuitGraph(
   nodes: Map<string, BreadboardNode>,
   _components: CircuitComponent[],
   wires: Wire[]
 ): Map<string, Set<string>> {
-  return buildWireAdjacency(wires, nodes);
+  const cache = buildConnectionGroupCache(nodes);
+  return buildWireAdjacency(wires, cache);
 }
