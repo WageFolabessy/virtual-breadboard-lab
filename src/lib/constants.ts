@@ -130,6 +130,9 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
     pinTypes: ['positive', 'negative'],
     defaultState: { voltage: 5, isOn: true },
     icon: '🔋',
+    isLoad: false,
+    isPolarized: true,
+    isConductive: true,
   },
   led: {
     type: 'led',
@@ -139,6 +142,9 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
     pinTypes: ['anode', 'cathode'],
     defaultState: { isLit: false, color: '#22C55E' },
     icon: '💡',
+    isLoad: true,
+    isPolarized: true,
+    isConductive: false,
   },
   resistor: {
     type: 'resistor',
@@ -148,6 +154,9 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
     pinTypes: ['terminal-1', 'terminal-2'],
     defaultState: { resistance: 220 },
     icon: '⚡',
+    isLoad: true,
+    isPolarized: false,
+    isConductive: false,
   },
   switch: {
     type: 'switch',
@@ -157,6 +166,9 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
     pinTypes: ['terminal-1', 'terminal-2'],
     defaultState: { isClosed: false },
     icon: '🔘',
+    isLoad: false,
+    isPolarized: false,
+    isConductive: true,
   },
   capacitor: {
     type: 'capacitor',
@@ -166,6 +178,9 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
     pinTypes: ['positive', 'negative'],
     defaultState: { capacitance: 10 },
     icon: '⚡',
+    isLoad: true,
+    isPolarized: true,
+    isConductive: false,
   },
   buzzer: {
     type: 'buzzer',
@@ -175,6 +190,9 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
     pinTypes: ['positive', 'negative'],
     defaultState: { isActive: false, frequency: 2000 },
     icon: '🔔',
+    isLoad: true,
+    isPolarized: true,
+    isConductive: false,
   },
 } as const;
 

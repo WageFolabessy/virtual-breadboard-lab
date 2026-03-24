@@ -18,6 +18,7 @@ import {
   getWireDrawingState,
   subscribeToWireDrawing,
 } from "@/lib/store/circuit-store";
+import { useShallow } from "zustand/react/shallow";
 import {
   asBatteryState,
   asLEDState,
@@ -82,16 +83,22 @@ IsolatedWirePreview.displayName = "IsolatedWirePreview";
 // ---- Main Workspace Component ----
 export const Workspace: React.FC = () => {
   // ---- State subscriptions ----
-  const nodes = useCircuitStore((state) => state.nodes);
-  const components = useCircuitStore((state) => state.components);
-  const wires = useCircuitStore((state) => state.wires);
+  // Bundle reference-type selectors (Map/Array/Set) with useShallow
+  const { nodes, components, wires, simulation, activeNodes } = useCircuitStore(
+    useShallow((state) => ({
+      nodes: state.nodes,
+      components: state.components,
+      wires: state.wires,
+      simulation: state.simulation,
+      activeNodes: state.activeNodes,
+    })),
+  );
+  // Primitive selectors use strict equality — no useShallow needed
   const wireStartNodeId = useCircuitStore((state) => state.wireStartNodeId);
   const selectedColor = useCircuitStore((state) => state.selectedColor);
   const selectedComponentId = useCircuitStore(
     (state) => state.selectedComponentId,
   );
-  const simulation = useCircuitStore((state) => state.simulation);
-  const activeNodes = useCircuitStore((state) => state.activeNodes);
 
   // ---- Hooks ----
   const { isInitialized } = useHydration();

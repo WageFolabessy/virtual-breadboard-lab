@@ -141,6 +141,12 @@ export interface ComponentDefinition {
   pinTypes: PinType[];
   defaultState: ComponentState;
   icon: string;  // SVG path or emoji
+  /** True if component consumes power (LED, resistor, buzzer). False for power sources and passthrough. */
+  isLoad: boolean;
+  /** True if component has directional flow (anode/cathode, +/-). */
+  isPolarized: boolean;
+  /** True if component passes current when active (wire, switch-closed, battery). */
+  isConductive: boolean;
 }
 
 // ---- Saved Circuit (for localStorage) ----

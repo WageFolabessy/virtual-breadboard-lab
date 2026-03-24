@@ -7,6 +7,7 @@
 
 import React from "react";
 import { useCircuitStore } from "@/lib/store/circuit-store";
+import { useShallow } from "zustand/react/shallow";
 import { ComponentType } from "@/lib/types";
 import { COMPONENT_DEFINITIONS, COLOR_PALETTE } from "@/lib/constants";
 import { ColorSwatchButton } from "@/components/ui";
@@ -58,7 +59,16 @@ export const ComponentLibrary: React.FC = () => {
     setSelectedColor,
     placementComponent,
     placementPins,
-  } = useCircuitStore();
+  } = useCircuitStore(
+    useShallow((state) => ({
+      selectedTool: state.selectedTool,
+      setSelectedTool: state.setSelectedTool,
+      selectedColor: state.selectedColor,
+      setSelectedColor: state.setSelectedColor,
+      placementComponent: state.placementComponent,
+      placementPins: state.placementPins,
+    })),
+  );
 
   const componentTypes: ComponentType[] = ["battery", "led"];
 

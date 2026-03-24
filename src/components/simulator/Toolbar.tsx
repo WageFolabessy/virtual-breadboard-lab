@@ -5,11 +5,13 @@
 // Top toolbar with tool selection and actions
 // ============================================
 
-import React, { useEffect } from "react";
+import React from "react";
 import { useCircuitStore } from "@/lib/store/circuit-store";
+import { useShallow } from "zustand/react/shallow";
 import { ToolType } from "@/lib/types";
 import { SHORTCUTS } from "@/lib/constants";
 import { StatusBadge } from "@/components/ui";
+import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 
 interface ToolButtonProps {
   tool: ToolType;
@@ -153,40 +155,17 @@ const ClearIcon = () => (
 
 export const Toolbar: React.FC = () => {
   const { selectedTool, setSelectedTool, clearAll, simulation } =
-    useCircuitStore();
+    useCircuitStore(
+      useShallow((state) => ({
+        selectedTool: state.selectedTool,
+        setSelectedTool: state.setSelectedTool,
+        clearAll: state.clearAll,
+        simulation: state.simulation,
+      })),
+    );
 
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Ignore if typing in input
-      if (
-        e.target instanceof HTMLInputElement ||
-        e.target instanceof HTMLTextAreaElement
-      ) {
-        return;
-      }
-
-      switch (e.key.toLowerCase()) {
-        case SHORTCUTS.SELECT_TOOL:
-          setSelectedTool("select");
-          break;
-        case SHORTCUTS.WIRE_TOOL:
-          setSelectedTool("wire");
-          break;
-        case SHORTCUTS.DELETE_TOOL:
-          setSelectedTool("delete");
-          break;
-        case SHORTCUTS.ESCAPE:
-          setSelectedTool("select");
-          useCircuitStore.getState().cancelWire();
-          useCircuitStore.getState().cancelComponentPlacement();
-          break;
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [setSelectedTool]);
+  // Keyboard shortcuts extracted to hook
+  useKeyboardShortcuts();
 
   return (
     <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">

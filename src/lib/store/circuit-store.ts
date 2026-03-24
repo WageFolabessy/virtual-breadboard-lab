@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist, StateStorage, createJSONStorage } from 'zustand/middleware';
+import { useShallow } from 'zustand/react/shallow';
 import {
   BreadboardNode,
   CircuitComponent,
@@ -794,14 +795,14 @@ export function clearVBLStorage(): void {
 }
 
 // ---- Selector Hooks (Optimized with shallow comparison) ----
-export const useNodes = () => useCircuitStore((state) => state.nodes);
-export const useComponents = () => useCircuitStore((state) => state.components);
-export const useWires = () => useCircuitStore((state) => state.wires);
+export const useNodes = () => useCircuitStore(useShallow((state) => state.nodes));
+export const useComponents = () => useCircuitStore(useShallow((state) => state.components));
+export const useWires = () => useCircuitStore(useShallow((state) => state.wires));
 export const useSelectedTool = () => useCircuitStore((state) => state.selectedTool);
-export const useSimulation = () => useCircuitStore((state) => state.simulation);
-export const useActiveNodes = () => useCircuitStore((state) => state.activeNodes);
-export const usePositiveNodes = () => useCircuitStore((state) => state.positiveNodes);
-export const useNegativeNodes = () => useCircuitStore((state) => state.negativeNodes);
+export const useSimulation = () => useCircuitStore(useShallow((state) => state.simulation));
+export const useActiveNodes = () => useCircuitStore(useShallow((state) => state.activeNodes));
+export const usePositiveNodes = () => useCircuitStore(useShallow((state) => state.positiveNodes));
+export const useNegativeNodes = () => useCircuitStore(useShallow((state) => state.negativeNodes));
 
 // ---- Isolated Wire Drawing State (Does NOT trigger component re-renders) ----
 // This is a lightweight ref-based store for temporary wire drawing visuals
