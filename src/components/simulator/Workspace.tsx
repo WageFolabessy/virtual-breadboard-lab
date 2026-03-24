@@ -107,7 +107,7 @@ export const Workspace: React.FC = () => {
   const { selectComponent, removeWire, toggleSwitch, removeComponent } =
     useCircuitActions();
   const isComponentActive = useComponentActiveChecker(components, activeNodes);
-  
+
   // NEW: Wire selection action
   const selectWire = (wireId: string | null) => {
     useCircuitStore.getState().selectWire(wireId);
@@ -143,14 +143,15 @@ export const Workspace: React.FC = () => {
       <Header />
       <Toolbar />
 
-      <div className="flex-1 flex overflow-hidden">
+      {/* Main Content Area - Mobile: stacked, Desktop: 3-column */}
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* Left Sidebar */}
         <ComponentLibrary />
 
         {/* Main Canvas Area — infinite-canvas with pan/zoom */}
         <div
           ref={panZoomContainerRef}
-          className="flex-1 relative overflow-hidden bg-gray-200"
+          className="flex-1 relative overflow-hidden bg-gray-200 min-h-[50vh] lg:min-h-0"
           style={{ cursor: isPanning ? "grabbing" : "crosshair" }}
           onWheel={panZoomHandlers.onWheel}
           onMouseDown={panZoomHandlers.onMouseDown}
@@ -304,7 +305,7 @@ export const Workspace: React.FC = () => {
           <div className="absolute bottom-4 right-4 flex items-center gap-1 bg-white/90 backdrop-blur-sm border border-gray-300 rounded-lg shadow-lg px-2 py-1.5 select-none">
             <button
               onClick={panZoomActions.zoomOut}
-              className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-gray-100 active:bg-gray-200 text-gray-700 font-bold text-lg transition-colors"
+              className="w-10 h-10 flex items-center justify-center rounded-md hover:bg-gray-100 active:bg-gray-200 text-gray-700 font-bold text-lg transition-colors cursor-pointer"
               title="Zoom Out"
             >
               −
@@ -314,7 +315,7 @@ export const Workspace: React.FC = () => {
             </span>
             <button
               onClick={panZoomActions.zoomIn}
-              className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-gray-100 active:bg-gray-200 text-gray-700 font-bold text-lg transition-colors"
+              className="w-10 h-10 flex items-center justify-center rounded-md hover:bg-gray-100 active:bg-gray-200 text-gray-700 font-bold text-lg transition-colors cursor-pointer"
               title="Zoom In"
             >
               +
@@ -322,7 +323,7 @@ export const Workspace: React.FC = () => {
             <div className="w-px h-5 bg-gray-300 mx-1" />
             <button
               onClick={panZoomActions.resetView}
-              className="px-2 h-8 flex items-center justify-center rounded-md hover:bg-gray-100 active:bg-gray-200 text-gray-600 text-xs font-medium transition-colors"
+              className="px-3 h-10 flex items-center justify-center rounded-md hover:bg-gray-100 active:bg-gray-200 text-gray-600 text-xs font-medium transition-colors cursor-pointer"
               title="Reset Zoom & Pan"
             >
               Reset
@@ -343,8 +344,8 @@ export const Workspace: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Panel - Info/Properties */}
-        <div className="w-64 bg-gray-50 border-l border-gray-200 p-4">
+        {/* Right Panel - Info/Properties - Hidden on mobile, shown on desktop */}
+        <div className="hidden lg:block w-64 bg-gray-50 border-l border-gray-200 p-4 overflow-y-auto">
           <h2 className="text-lg font-bold text-gray-800 mb-4">Circuit Info</h2>
 
           <StatusIndicator
@@ -360,31 +361,62 @@ export const Workspace: React.FC = () => {
               );
               if (!component) return null;
 
+              // Clean display names for component types
+              const displayName: Record<string, string> = {
+                battery: "Battery",
+                led: "LED",
+                resistor: "Resistor",
+                switch: "Switch",
+                capacitor: "Capacitor",
+                buzzer: "Buzzer",
+              };
+
+              // Clean display names for pin types
+              const pinDisplayName: Record<string, string> = {
+                positive: "Positive",
+                negative: "Negative",
+                anode: "Anode",
+                cathode: "Cathode",
+                "terminal-1": "Terminal 1",
+                "terminal-2": "Terminal 2",
+              };
+
+              const typeName = displayName[component.type] || component.type;
+
               return (
                 <div className="bg-white rounded-lg p-4 border border-gray-200 mb-4">
-                  <h3 className="text-sm font-semibold text-gray-600 mb-2">
-                    Selected Component
+                  <h3 className="text-sm font-semibold text-gray-600 mb-3">
+                    Selected {typeName}
                   </h3>
                   <div className="space-y-2 text-sm">
-                    <p>
-                      <span className="text-gray-500">Type:</span>{" "}
-                      <span className="font-medium capitalize">
-                        {component.type}
-                      </span>
-                    </p>
+                    {/* Pin Connections (matching wire info style) */}
+                    {component.pins.map((pin, index) => (
+                      <p key={pin.id || index}>
+                        <span className="text-gray-500">
+                          {pinDisplayName[pin.pinType] || pin.pinType}:
+                        </span>{" "}
+                        <span className="font-mono text-xs text-gray-700">
+                          {pin.connectedNodeId || "Unconnected"}
+                        </span>
+                      </p>
+                    ))}
+                    
+                    {/* Component ID */}
                     <p>
                       <span className="text-gray-500">ID:</span>{" "}
-                      <span className="font-mono text-xs">
+                      <span className="font-mono text-xs text-gray-700">
                         {component.id.slice(0, 8)}...
                       </span>
                     </p>
+
+                    {/* Component-specific state info */}
                     {component.type === "battery" &&
                       (() => {
                         const state = asBatteryState(component.state);
                         return state ? (
                           <p>
                             <span className="text-gray-500">Voltage:</span>{" "}
-                            <span className="font-medium">
+                            <span className="text-gray-900 font-medium">
                               {state.voltage}V
                             </span>
                           </p>
@@ -403,7 +435,7 @@ export const Workspace: React.FC = () => {
                               className={`font-medium ${
                                 ledState?.isLit
                                   ? "text-green-600"
-                                  : "text-gray-500"
+                                  : "text-gray-400"
                               }`}
                             >
                               {ledState?.isLit ? "ON" : "OFF"}
@@ -422,7 +454,7 @@ export const Workspace: React.FC = () => {
                                 className={`font-medium ${
                                   switchState?.isClosed
                                     ? "text-green-600"
-                                    : "text-gray-500"
+                                    : "text-gray-400"
                                 }`}
                               >
                                 {switchState?.isClosed ? "CLOSED" : "OPEN"}
@@ -430,7 +462,7 @@ export const Workspace: React.FC = () => {
                             </p>
                             <button
                               onClick={() => toggleSwitch(component.id)}
-                              className="w-full px-3 py-1.5 bg-blue-50 text-blue-600 text-sm rounded hover:bg-blue-100 transition-colors"
+                              className="mt-2 w-full px-3 py-2.5 bg-blue-50 text-blue-600 text-sm rounded hover:bg-blue-100 transition-colors cursor-pointer"
                             >
                               Toggle Switch
                             </button>
@@ -443,7 +475,7 @@ export const Workspace: React.FC = () => {
                         return state ? (
                           <p>
                             <span className="text-gray-500">Resistance:</span>{" "}
-                            <span className="font-medium">
+                            <span className="text-gray-900 font-medium">
                               {state.resistance}Ω
                             </span>
                           </p>
@@ -455,7 +487,7 @@ export const Workspace: React.FC = () => {
                         return state ? (
                           <p>
                             <span className="text-gray-500">Capacitance:</span>{" "}
-                            <span className="font-medium">
+                            <span className="text-gray-900 font-medium">
                               {state.capacitance}µF
                             </span>
                           </p>
@@ -476,7 +508,7 @@ export const Workspace: React.FC = () => {
                               className={`font-medium ${
                                 buzzerState?.isActive
                                   ? "text-yellow-600"
-                                  : "text-gray-500"
+                                  : "text-gray-400"
                               }`}
                             >
                               {buzzerState?.isActive ? "BUZZING" : "SILENT"}
@@ -486,9 +518,9 @@ export const Workspace: React.FC = () => {
                       })()}
                     <button
                       onClick={() => removeComponent(selectedComponentId)}
-                      className="mt-2 w-full px-3 py-1.5 bg-red-50 text-red-600 text-sm rounded hover:bg-red-100 transition-colors"
+                      className="mt-2 w-full px-3 py-2.5 bg-red-50 text-red-600 text-sm rounded hover:bg-red-100 transition-colors cursor-pointer"
                     >
-                      Delete Component
+                      Delete {typeName}
                     </button>
                   </div>
                 </div>
@@ -506,38 +538,38 @@ export const Workspace: React.FC = () => {
 
               return (
                 <div className="bg-white rounded-lg p-4 border border-gray-200 mb-4">
-                  <h3 className="text-sm font-semibold text-gray-600 mb-2">
+                  <h3 className="text-sm font-semibold text-gray-600 mb-3">
                     Selected Wire
                   </h3>
                   <div className="space-y-2 text-sm">
                     <p>
                       <span className="text-gray-500">Color:</span>{" "}
-                      <span 
+                      <span
                         className="inline-block w-4 h-4 rounded border border-gray-300 align-middle ml-1"
                         style={{ backgroundColor: wire.color }}
                       />
                     </p>
                     <p>
                       <span className="text-gray-500">Start Node:</span>{" "}
-                      <span className="font-mono text-xs">
-                        {startNode?.id || 'Unknown'}
+                      <span className="font-mono text-xs text-gray-700">
+                        {startNode?.id || "Unknown"}
                       </span>
                     </p>
                     <p>
                       <span className="text-gray-500">End Node:</span>{" "}
-                      <span className="font-mono text-xs">
-                        {endNode?.id || 'Unknown'}
+                      <span className="font-mono text-xs text-gray-700">
+                        {endNode?.id || "Unknown"}
                       </span>
                     </p>
                     <p>
                       <span className="text-gray-500">ID:</span>{" "}
-                      <span className="font-mono text-xs">
+                      <span className="font-mono text-xs text-gray-700">
                         {wire.id.slice(0, 8)}...
                       </span>
                     </p>
                     <button
                       onClick={() => removeWire(selectedWireId)}
-                      className="mt-2 w-full px-3 py-1.5 bg-red-50 text-red-600 text-sm rounded hover:bg-red-100 transition-colors"
+                      className="mt-2 w-full px-3 py-2.5 bg-red-50 text-red-600 text-sm rounded hover:bg-red-100 transition-colors cursor-pointer"
                     >
                       Delete Wire
                     </button>

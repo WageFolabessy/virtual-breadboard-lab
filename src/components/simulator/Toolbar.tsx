@@ -34,11 +34,11 @@ const ToolButton: React.FC<ToolButtonProps> = ({
       onClick={onClick}
       title={`${label} (${shortcut.toUpperCase()})`}
       className={`
-        flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-150
+        flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-150 cursor-pointer
         ${
           isActive
             ? "bg-blue-500 text-white shadow-md"
-            : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200"
+            : "bg-white text-gray-700 hover:bg-gray-100 hover:scale-[1.02] border border-gray-200"
         }
       `}
     >
@@ -74,11 +74,11 @@ const ActionButton: React.FC<ActionButtonProps> = ({
       onClick={onClick}
       title={label}
       className={`
-        flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-150
+        flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-150 cursor-pointer
         ${
           variant === "danger"
-            ? "bg-red-50 text-red-600 hover:bg-red-100 border border-red-200"
-            : "bg-white text-gray-700 hover:bg-gray-100 border border-gray-200"
+            ? "bg-red-50 text-red-600 hover:bg-red-100 hover:scale-[1.02] border border-red-200"
+            : "bg-white text-gray-700 hover:bg-gray-100 hover:scale-[1.02] border border-gray-200"
         }
       `}
     >

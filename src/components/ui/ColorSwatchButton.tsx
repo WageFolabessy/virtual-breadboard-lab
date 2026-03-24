@@ -24,8 +24,8 @@ export const ColorSwatchButton: React.FC<ColorSwatchButtonProps> = ({
       onClick={onClick}
       title={name}
       className={`
-        w-8 h-8 rounded-full border-2 transition-all duration-150
-        ${isSelected ? "border-gray-800 scale-110 ring-2 ring-offset-2 ring-gray-400" : "border-gray-300 hover:scale-105"}
+        w-10 h-10 rounded-full border-2 transition-all duration-150 cursor-pointer
+        ${isSelected ? "border-gray-800 scale-110 ring-2 ring-offset-2 ring-gray-400" : "border-gray-300 hover:scale-110 hover:border-gray-400"}
       `}
       style={{ backgroundColor: color }}
     />

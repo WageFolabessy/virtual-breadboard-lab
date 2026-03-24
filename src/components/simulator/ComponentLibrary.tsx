@@ -32,11 +32,11 @@ const ComponentCard: React.FC<ComponentCardProps> = ({
     <button
       onClick={onClick}
       className={`
-        w-full p-3 rounded-lg border-2 transition-all duration-200 text-left
+        w-full p-3 rounded-lg border-2 transition-all duration-200 text-left cursor-pointer
         ${
           isSelected
             ? "border-blue-500 bg-blue-50 shadow-md"
-            : "border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm"
+            : "border-gray-200 bg-white hover:border-gray-300 hover:shadow-sm hover:scale-[1.02]"
         }
       `}
     >
@@ -73,7 +73,7 @@ export const ComponentLibrary: React.FC = () => {
   const componentTypes: ComponentType[] = ["battery", "led"];
 
   return (
-    <div className="w-64 bg-gray-50 border-r border-gray-200 flex flex-col h-full">
+    <div className="w-full lg:w-64 bg-gray-50 border-b lg:border-b-0 lg:border-r border-gray-200 flex flex-col max-h-48 lg:max-h-full lg:h-full overflow-hidden">
       {/* Header */}
       <div className="p-4 border-b border-gray-200 bg-white">
         <h2 className="text-lg font-bold text-gray-800">Components</h2>
@@ -140,7 +140,7 @@ export const ComponentLibrary: React.FC = () => {
             onClick={() =>
               useCircuitStore.getState().cancelComponentPlacement()
             }
-            className="mt-2 text-xs text-blue-600 hover:text-blue-800 underline"
+            className="mt-2 text-xs text-blue-600 hover:text-blue-800 underline cursor-pointer"
           >
             Cancel placement
           </button>
