@@ -11,6 +11,7 @@ import { useShallow } from "zustand/react/shallow";
 import { ComponentType } from "@/lib/types";
 import { COMPONENT_DEFINITIONS, COLOR_PALETTE } from "@/lib/constants";
 import { ColorSwatchButton } from "@/components/ui";
+import { useCircuitActions } from "@/hooks/useCircuitActions";
 
 interface ComponentCardProps {
   type: ComponentType;
@@ -70,7 +71,16 @@ export const ComponentLibrary: React.FC = () => {
     })),
   );
 
-  const componentTypes: ComponentType[] = ["battery", "led"];
+  const { cancelComponentPlacement } = useCircuitActions();
+
+  const componentTypes: ComponentType[] = [
+    "battery",
+    "led",
+    "resistor",
+    "switch",
+    "capacitor",
+    "buzzer",
+  ];
 
   return (
     <div className="w-full lg:w-64 bg-gray-50 border-b lg:border-b-0 lg:border-r border-gray-200 flex flex-col max-h-48 lg:max-h-full lg:h-full overflow-hidden">
@@ -137,9 +147,7 @@ export const ComponentLibrary: React.FC = () => {
               : `Click second pin location (-/${placementComponent === "led" ? "cathode" : "negative"})`}
           </p>
           <button
-            onClick={() =>
-              useCircuitStore.getState().cancelComponentPlacement()
-            }
+            onClick={cancelComponentPlacement}
             className="mt-2 text-xs text-blue-600 hover:text-blue-800 underline cursor-pointer"
           >
             Cancel placement

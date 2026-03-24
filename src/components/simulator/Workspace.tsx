@@ -5,28 +5,22 @@
 // Main client component that composes the simulator
 // ============================================
 //
-// PERFORMANCE OPTIMIZATIONS:
+// AGENTS.md COMPLIANCE:
 // 1. Wire preview uses isolated ref-based state (no React re-renders)
 // 2. Circuit evaluation ONLY runs on finalized actions (mouseUp)
 // 3. Memoized selectors prevent cascade re-renders
 // 4. All logic extracted into dedicated hooks — this component is pure rendering
+// 5. Info panels extracted to separate "dumb" components
 // ============================================
 
-import React, { useSyncExternalStore } from "react";
+import React, { useSyncExternalStore, useMemo } from "react";
 import {
   useCircuitStore,
   getWireDrawingState,
   subscribeToWireDrawing,
 } from "@/lib/store/circuit-store";
 import { useShallow } from "zustand/react/shallow";
-import {
-  asBatteryState,
-  asLEDState,
-  asSwitchState,
-  asResistorState,
-  asCapacitorState,
-  asBuzzerState,
-} from "@/lib/types";
+import { asLEDState, asSwitchState, asBuzzerState } from "@/lib/types";
 import { StatusIndicator } from "@/components/ui/StatusIndicator";
 import { KbdShortcut } from "@/components/ui/KbdShortcut";
 import { Breadboard } from "./Breadboard";
@@ -41,6 +35,7 @@ import {
   Capacitor,
   Buzzer,
 } from "./electronics";
+import { ComponentInfoPanel, WireInfoPanel } from "./panels";
 import { Header } from "@/components/Header";
 import { useHydration } from "@/hooks/useHydration";
 import {
@@ -99,19 +94,31 @@ export const Workspace: React.FC = () => {
   const selectedComponentId = useCircuitStore(
     (state) => state.selectedComponentId,
   );
-  const selectedWireId = useCircuitStore((state) => state.selectedWireId); // NEW
-  const selectedTool = useCircuitStore((state) => state.selectedTool); // NEW
+  const selectedWireId = useCircuitStore((state) => state.selectedWireId);
+  const selectedTool = useCircuitStore((state) => state.selectedTool);
+
+  // ---- Memoized derived state ----
+  // Find selected component/wire ONCE per render (not in JSX)
+  const selectedComponent = useMemo(
+    () => components.find((c) => c.id === selectedComponentId) ?? null,
+    [components, selectedComponentId],
+  );
+  const selectedWire = useMemo(
+    () => wires.find((w) => w.id === selectedWireId) ?? null,
+    [wires, selectedWireId],
+  );
 
   // ---- Hooks ----
   const { isInitialized } = useHydration();
-  const { selectComponent, removeWire, toggleSwitch, removeComponent } =
-    useCircuitActions();
+  const {
+    selectComponent,
+    removeWire,
+    toggleSwitch,
+    removeComponent,
+    selectWire,
+  } = useCircuitActions();
   const isComponentActive = useComponentActiveChecker(components, activeNodes);
 
-  // NEW: Wire selection action
-  const selectWire = (wireId: string | null) => {
-    useCircuitStore.getState().selectWire(wireId);
-  };
   const {
     containerRef: panZoomContainerRef,
     state: panZoomState,
@@ -353,230 +360,24 @@ export const Workspace: React.FC = () => {
             message={simulation.message}
           />
 
-          {/* Selected Component Info */}
-          {selectedComponentId &&
-            (() => {
-              const component = components.find(
-                (c) => c.id === selectedComponentId,
-              );
-              if (!component) return null;
+          {/* Selected Component Info - Using extracted panel component */}
+          {selectedComponent && (
+            <ComponentInfoPanel
+              component={selectedComponent}
+              simulation={simulation}
+              onToggleSwitch={toggleSwitch}
+              onDelete={removeComponent}
+            />
+          )}
 
-              // Clean display names for component types
-              const displayName: Record<string, string> = {
-                battery: "Battery",
-                led: "LED",
-                resistor: "Resistor",
-                switch: "Switch",
-                capacitor: "Capacitor",
-                buzzer: "Buzzer",
-              };
-
-              // Clean display names for pin types
-              const pinDisplayName: Record<string, string> = {
-                positive: "Positive",
-                negative: "Negative",
-                anode: "Anode",
-                cathode: "Cathode",
-                "terminal-1": "Terminal 1",
-                "terminal-2": "Terminal 2",
-              };
-
-              const typeName = displayName[component.type] || component.type;
-
-              return (
-                <div className="bg-white rounded-lg p-4 border border-gray-200 mb-4">
-                  <h3 className="text-sm font-semibold text-gray-600 mb-3">
-                    Selected {typeName}
-                  </h3>
-                  <div className="space-y-2 text-sm">
-                    {/* Pin Connections (matching wire info style) */}
-                    {component.pins.map((pin, index) => (
-                      <p key={pin.id || index}>
-                        <span className="text-gray-500">
-                          {pinDisplayName[pin.pinType] || pin.pinType}:
-                        </span>{" "}
-                        <span className="font-mono text-xs text-gray-700">
-                          {pin.connectedNodeId || "Unconnected"}
-                        </span>
-                      </p>
-                    ))}
-                    
-                    {/* Component ID */}
-                    <p>
-                      <span className="text-gray-500">ID:</span>{" "}
-                      <span className="font-mono text-xs text-gray-700">
-                        {component.id.slice(0, 8)}...
-                      </span>
-                    </p>
-
-                    {/* Component-specific state info */}
-                    {component.type === "battery" &&
-                      (() => {
-                        const state = asBatteryState(component.state);
-                        return state ? (
-                          <p>
-                            <span className="text-gray-500">Voltage:</span>{" "}
-                            <span className="text-gray-900 font-medium">
-                              {state.voltage}V
-                            </span>
-                          </p>
-                        ) : null;
-                      })()}
-                    {component.type === "led" &&
-                      (() => {
-                        const simState = simulation.componentStates.get(
-                          component.id,
-                        );
-                        const ledState = simState ? asLEDState(simState) : null;
-                        return (
-                          <p>
-                            <span className="text-gray-500">State:</span>{" "}
-                            <span
-                              className={`font-medium ${
-                                ledState?.isLit
-                                  ? "text-green-600"
-                                  : "text-gray-400"
-                              }`}
-                            >
-                              {ledState?.isLit ? "ON" : "OFF"}
-                            </span>
-                          </p>
-                        );
-                      })()}
-                    {component.type === "switch" &&
-                      (() => {
-                        const switchState = asSwitchState(component.state);
-                        return (
-                          <>
-                            <p>
-                              <span className="text-gray-500">State:</span>{" "}
-                              <span
-                                className={`font-medium ${
-                                  switchState?.isClosed
-                                    ? "text-green-600"
-                                    : "text-gray-400"
-                                }`}
-                              >
-                                {switchState?.isClosed ? "CLOSED" : "OPEN"}
-                              </span>
-                            </p>
-                            <button
-                              onClick={() => toggleSwitch(component.id)}
-                              className="mt-2 w-full px-3 py-2.5 bg-blue-50 text-blue-600 text-sm rounded hover:bg-blue-100 transition-colors cursor-pointer"
-                            >
-                              Toggle Switch
-                            </button>
-                          </>
-                        );
-                      })()}
-                    {component.type === "resistor" &&
-                      (() => {
-                        const state = asResistorState(component.state);
-                        return state ? (
-                          <p>
-                            <span className="text-gray-500">Resistance:</span>{" "}
-                            <span className="text-gray-900 font-medium">
-                              {state.resistance}Ω
-                            </span>
-                          </p>
-                        ) : null;
-                      })()}
-                    {component.type === "capacitor" &&
-                      (() => {
-                        const state = asCapacitorState(component.state);
-                        return state ? (
-                          <p>
-                            <span className="text-gray-500">Capacitance:</span>{" "}
-                            <span className="text-gray-900 font-medium">
-                              {state.capacitance}µF
-                            </span>
-                          </p>
-                        ) : null;
-                      })()}
-                    {component.type === "buzzer" &&
-                      (() => {
-                        const simState = simulation.componentStates.get(
-                          component.id,
-                        );
-                        const buzzerState = simState
-                          ? asBuzzerState(simState)
-                          : null;
-                        return (
-                          <p>
-                            <span className="text-gray-500">State:</span>{" "}
-                            <span
-                              className={`font-medium ${
-                                buzzerState?.isActive
-                                  ? "text-yellow-600"
-                                  : "text-gray-400"
-                              }`}
-                            >
-                              {buzzerState?.isActive ? "BUZZING" : "SILENT"}
-                            </span>
-                          </p>
-                        );
-                      })()}
-                    <button
-                      onClick={() => removeComponent(selectedComponentId)}
-                      className="mt-2 w-full px-3 py-2.5 bg-red-50 text-red-600 text-sm rounded hover:bg-red-100 transition-colors cursor-pointer"
-                    >
-                      Delete {typeName}
-                    </button>
-                  </div>
-                </div>
-              );
-            })()}
-
-          {/* Selected Wire Info */}
-          {selectedWireId &&
-            (() => {
-              const wire = wires.find((w) => w.id === selectedWireId);
-              if (!wire) return null;
-
-              const startNode = nodes.get(wire.startNodeId);
-              const endNode = nodes.get(wire.endNodeId);
-
-              return (
-                <div className="bg-white rounded-lg p-4 border border-gray-200 mb-4">
-                  <h3 className="text-sm font-semibold text-gray-600 mb-3">
-                    Selected Wire
-                  </h3>
-                  <div className="space-y-2 text-sm">
-                    <p>
-                      <span className="text-gray-500">Color:</span>{" "}
-                      <span
-                        className="inline-block w-4 h-4 rounded border border-gray-300 align-middle ml-1"
-                        style={{ backgroundColor: wire.color }}
-                      />
-                    </p>
-                    <p>
-                      <span className="text-gray-500">Start Node:</span>{" "}
-                      <span className="font-mono text-xs text-gray-700">
-                        {startNode?.id || "Unknown"}
-                      </span>
-                    </p>
-                    <p>
-                      <span className="text-gray-500">End Node:</span>{" "}
-                      <span className="font-mono text-xs text-gray-700">
-                        {endNode?.id || "Unknown"}
-                      </span>
-                    </p>
-                    <p>
-                      <span className="text-gray-500">ID:</span>{" "}
-                      <span className="font-mono text-xs text-gray-700">
-                        {wire.id.slice(0, 8)}...
-                      </span>
-                    </p>
-                    <button
-                      onClick={() => removeWire(selectedWireId)}
-                      className="mt-2 w-full px-3 py-2.5 bg-red-50 text-red-600 text-sm rounded hover:bg-red-100 transition-colors cursor-pointer"
-                    >
-                      Delete Wire
-                    </button>
-                  </div>
-                </div>
-              );
-            })()}
+          {/* Selected Wire Info - Using extracted panel component */}
+          {selectedWire && (
+            <WireInfoPanel
+              wire={selectedWire}
+              nodes={nodes}
+              onDelete={removeWire}
+            />
+          )}
 
           {/* Help */}
           <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">

@@ -266,23 +266,17 @@ function createComponentPins(type: ComponentType, componentId: string): Componen
   }));
 }
 
+/**
+ * TRAIT-DRIVEN: Get default state from COMPONENT_DEFINITIONS
+ * This ensures consistency and allows new components to work automatically.
+ */
 function getDefaultComponentState(type: ComponentType): BatteryState | LEDState | SwitchState | ResistorState | CapacitorState | BuzzerState | Record<string, unknown> {
-  switch (type) {
-    case 'battery':
-      return { voltage: 5, isOn: true } as BatteryState;
-    case 'led':
-      return { isLit: false, color: '#22C55E' } as LEDState;
-    case 'switch':
-      return { isClosed: false } as SwitchState;
-    case 'resistor':
-      return { resistance: 220 } as ResistorState;
-    case 'capacitor':
-      return { capacitance: 10 } as CapacitorState;
-    case 'buzzer':
-      return { isActive: false, frequency: 2000 } as BuzzerState;
-    default:
-      return {};
+  const definition = COMPONENT_DEFINITIONS[type];
+  if (definition?.defaultState) {
+    // Return a copy to prevent mutation of the definition
+    return { ...definition.defaultState };
   }
+  return {};
 }
 
 // ---- Initial State ----

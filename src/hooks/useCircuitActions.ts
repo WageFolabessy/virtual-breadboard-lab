@@ -23,7 +23,15 @@ export function useCircuitActions() {
     useCircuitStore.getState().removeComponent(componentId);
   }, []);
 
-  return { selectComponent, removeWire, toggleSwitch, removeComponent };
+  const selectWire = useCallback((wireId: string | null) => {
+    useCircuitStore.getState().selectWire(wireId);
+  }, []);
+
+  const cancelComponentPlacement = useCallback(() => {
+    useCircuitStore.getState().cancelComponentPlacement();
+  }, []);
+
+  return { selectComponent, removeWire, toggleSwitch, removeComponent, selectWire, cancelComponentPlacement };
 }
 
 /**
