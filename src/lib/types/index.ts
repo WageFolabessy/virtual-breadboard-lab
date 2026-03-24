@@ -31,8 +31,8 @@ export interface BreadboardNode {
 }
 
 // ---- Electronic Component Types ----
-export type ComponentType = 'battery' | 'led' | 'resistor' | 'wire' | 'switch' | 'capacitor' | 'buzzer';
-export type PinType = 'positive' | 'negative' | 'anode' | 'cathode' | 'terminal-1' | 'terminal-2';
+export type ComponentType = 'battery' | 'led' | 'resistor' | 'wire' | 'switch' | 'capacitor' | 'buzzer' | 'diode' | 'npn_transistor' | 'pnp_transistor';
+export type PinType = 'positive' | 'negative' | 'anode' | 'cathode' | 'terminal-1' | 'terminal-2' | 'collector' | 'base' | 'emitter';
 
 export interface ComponentPin {
   id: string;                      // Format: "{componentId}-{pinType}"
@@ -77,7 +77,16 @@ export interface BuzzerState {
   frequency: number;  // in Hz
 }
 
-export type ComponentState = BatteryState | LEDState | ResistorState | SwitchState | CapacitorState | BuzzerState | Record<string, unknown>;
+export interface DiodeState {
+  isForwardBiased: boolean;
+}
+
+export interface TransistorState {
+  isOn: boolean;      // Whether the transistor is conducting (base activated)
+  type: 'npn' | 'pnp';
+}
+
+export type ComponentState = BatteryState | LEDState | ResistorState | SwitchState | CapacitorState | BuzzerState | DiodeState | TransistorState | Record<string, unknown>;
 
 // ---- Wire Types ----
 export interface Wire {
@@ -202,5 +211,15 @@ export function asCapacitorState(state: ComponentState): CapacitorState | null {
 
 export function asBuzzerState(state: ComponentState): BuzzerState | null {
   if (state && 'isActive' in state && 'frequency' in state) return state as BuzzerState;
+  return null;
+}
+
+export function asDiodeState(state: ComponentState): DiodeState | null {
+  if (state && 'isForwardBiased' in state) return state as DiodeState;
+  return null;
+}
+
+export function asTransistorState(state: ComponentState): TransistorState | null {
+  if (state && 'isOn' in state && 'type' in state) return state as TransistorState;
   return null;
 }

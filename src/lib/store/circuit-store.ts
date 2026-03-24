@@ -325,7 +325,8 @@ export const useCircuitStore = create<CircuitStore>()(
         });
         
         // If selecting a component type, start placement mode
-        if (['battery', 'led', 'resistor', 'switch', 'capacitor', 'buzzer'].includes(tool)) {
+        // Trait-driven: check COMPONENT_DEFINITIONS instead of hardcoding types
+        if (tool in COMPONENT_DEFINITIONS) {
           get().startComponentPlacement(tool as ComponentType);
         }
       },
@@ -369,6 +370,9 @@ export const useCircuitStore = create<CircuitStore>()(
           case 'switch':
           case 'capacitor':
           case 'buzzer':
+          case 'diode':
+          case 'npn_transistor':
+          case 'pnp_transistor':
             state.placeComponentPin(nodeId);
             break;
             
@@ -470,6 +474,83 @@ export const useCircuitStore = create<CircuitStore>()(
         const definition = COMPONENT_DEFINITIONS[state.placementComponent];
         if (!definition) return;
         
+        // ---- 3-PIN AUTO-PLACEMENT (Transistors) ----
+        // For 3-pin components, a single click auto-resolves all 3 pins
+        // using consecutive columns in the same row (col, col+1, col+2)
+        if (definition.pinCount === 3) {
+          const rootRow = node.id.split('-')[0]; // e.g. "A" from "A-5"
+          const rootCol = node.position.col;
+          
+          // Find 3 consecutive nodes: rootCol, rootCol+1, rootCol+2
+          const pinNodeIds: string[] = [];
+          for (let offset = 0; offset < 3; offset++) {
+            const targetCol = rootCol + offset;
+            const targetId = `${rootRow}-${targetCol}`;
+            const targetNode = state.nodes.get(targetId);
+            
+            if (!targetNode) {
+              // Node doesn't exist (edge of board)
+              return;
+            }
+            if (targetNode.isOccupied) {
+              // One of the required nodes is occupied
+              return;
+            }
+            pinNodeIds.push(targetId);
+          }
+          
+          // All 3 nodes validated — place the component
+          get().saveSnapshot();
+          const componentId = generateId();
+          const pins = createComponentPins(state.placementComponent, componentId);
+          
+          pins.forEach((pin, index) => {
+            pin.connectedNodeId = pinNodeIds[index];
+          });
+          
+          const firstNode = state.nodes.get(pinNodeIds[0])!;
+          const lastNode = state.nodes.get(pinNodeIds[2])!;
+          const canvasPosition = {
+            x: (firstNode.canvasPosition.x + lastNode.canvasPosition.x) / 2,
+            y: (firstNode.canvasPosition.y + lastNode.canvasPosition.y) / 2,
+          };
+          
+          const componentState = getDefaultComponentState(state.placementComponent);
+          
+          const newComponent: CircuitComponent = {
+            id: componentId,
+            type: state.placementComponent,
+            pins,
+            canvasPosition,
+            rotation: 0,
+            state: componentState,
+          };
+          
+          const updatedNodes = new Map(state.nodes);
+          pinNodeIds.forEach((pinNodeId) => {
+            const n = updatedNodes.get(pinNodeId);
+            if (n) {
+              updatedNodes.set(pinNodeId, {
+                ...n,
+                isOccupied: true,
+                occupiedBy: componentId,
+              });
+            }
+          });
+          
+          set({
+            components: [...state.components, newComponent],
+            nodes: updatedNodes,
+            placementComponent: null,
+            placementPins: [],
+            selectedTool: 'select',
+          });
+          
+          get().runSimulation();
+          return;
+        }
+        
+        // ---- STANDARD 2-PIN PLACEMENT ----
         const newPins = [...state.placementPins, nodeId];
         
         // Check if we have all pins placed

@@ -5,3 +5,5 @@ export { Resistor } from './Resistor';
 export { Switch } from './Switch';
 export { Capacitor } from './Capacitor';
 export { Buzzer } from './Buzzer';
+export { Diode } from './Diode';
+export { Transistor } from './Transistor';

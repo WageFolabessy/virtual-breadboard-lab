@@ -31,6 +31,9 @@ const COMPONENT_DISPLAY_NAMES: Record<string, string> = {
   switch: "Switch",
   capacitor: "Capacitor",
   buzzer: "Buzzer",
+  diode: "Diode",
+  npn_transistor: "NPN Transistor",
+  pnp_transistor: "PNP Transistor",
 };
 
 // Clean display names for pin types
@@ -41,6 +44,9 @@ const PIN_DISPLAY_NAMES: Record<string, string> = {
   cathode: "Cathode",
   "terminal-1": "Terminal 1",
   "terminal-2": "Terminal 2",
+  collector: "Collector",
+  base: "Base",
+  emitter: "Emitter",
 };
 
 interface ComponentInfoPanelProps {
@@ -190,19 +196,30 @@ const ComponentStateInfo: React.FC<ComponentStateInfoProps> = ({
     }
 
     case "buzzer": {
+      const buzzerComponentState = asBuzzerState(component.state);
       const simState = simulation.componentStates.get(component.id);
       const buzzerState = simState ? asBuzzerState(simState) : null;
       return (
-        <p>
-          <span className="text-gray-500">State:</span>{" "}
-          <span
-            className={`font-medium ${
-              buzzerState?.isActive ? "text-yellow-600" : "text-gray-400"
-            }`}
-          >
-            {buzzerState?.isActive ? "BUZZING" : "SILENT"}
-          </span>
-        </p>
+        <>
+          {buzzerComponentState && (
+            <p>
+              <span className="text-gray-500">Frequency:</span>{" "}
+              <span className="text-gray-900 font-medium">
+                {buzzerComponentState.frequency} Hz
+              </span>
+            </p>
+          )}
+          <p>
+            <span className="text-gray-500">State:</span>{" "}
+            <span
+              className={`font-medium ${
+                buzzerState?.isActive ? "text-yellow-600" : "text-gray-400"
+              }`}
+            >
+              {buzzerState?.isActive ? "BUZZING" : "SILENT"}
+            </span>
+          </p>
+        </>
       );
     }
 

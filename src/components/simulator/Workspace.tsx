@@ -34,6 +34,8 @@ import {
   Switch,
   Capacitor,
   Buzzer,
+  Diode,
+  Transistor,
 } from "./electronics";
 import { ComponentInfoPanel, WireInfoPanel } from "./panels";
 import { Header } from "@/components/Header";
@@ -297,6 +299,35 @@ export const Workspace: React.FC = () => {
                         nodes={nodes}
                         isSelected={isSelected}
                         isActive={buzzerState?.isActive ?? false}
+                        onClick={() => selectComponent(component.id)}
+                      />
+                    );
+                  }
+
+                  if (component.type === "diode") {
+                    return (
+                      <Diode
+                        key={component.id}
+                        component={component}
+                        nodes={nodes}
+                        isSelected={isSelected}
+                        isActive={isActive}
+                        onClick={() => selectComponent(component.id)}
+                      />
+                    );
+                  }
+
+                  if (
+                    component.type === "npn_transistor" ||
+                    component.type === "pnp_transistor"
+                  ) {
+                    return (
+                      <Transistor
+                        key={component.id}
+                        component={component}
+                        nodes={nodes}
+                        isSelected={isSelected}
+                        isActive={isActive}
                         onClick={() => selectComponent(component.id)}
                       />
                     );

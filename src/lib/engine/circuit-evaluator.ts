@@ -1,6 +1,7 @@
 // ============================================
-// CIRCUIT EVALUATOR ENGINE v5.1
-// Trait-Driven 2-Way Flood Fill for Parallel Circuits
+// CIRCUIT EVALUATOR ENGINE v6.0
+// Trait-Driven 2-Way Flood Fill with Multi-Pass Stabilization
+// Supports Transistors (NPN/PNP) as Dynamic Switches
 // ============================================
 // 
 // ELECTRICAL REALITY:
@@ -52,14 +53,14 @@ function getDefinition(type: string): ComponentDefinition {
 }
 
 // ---- Pin Type Helpers (Trait-Driven) ----
-// Determines if a pin type is a "positive entry" (anode, positive terminal)
+// Determines if a pin type is a "positive entry" (anode, positive terminal, collector)
 function isPositiveEntryPin(pinType: string): boolean {
-  return pinType === 'anode' || pinType === 'positive';
+  return pinType === 'anode' || pinType === 'positive' || pinType === 'collector';
 }
 
-// Determines if a pin type is a "negative entry" (cathode, negative terminal)
+// Determines if a pin type is a "negative entry" (cathode, negative terminal, emitter)
 function isNegativeEntryPin(pinType: string): boolean {
-  return pinType === 'cathode' || pinType === 'negative';
+  return pinType === 'cathode' || pinType === 'negative' || pinType === 'emitter';
 }
 
 // ---- Circuit Status Types ----
@@ -206,9 +207,39 @@ function isPowerSourceActive(component: CircuitComponent): boolean {
  * - If isConductive=true → conducts, but may have conditional state
  *   - If component has 'isClosed' state → only conducts when isClosed=true (switches)
  *   - Otherwise → always conducts
+ * 
+ * TRANSISTOR LOGIC (requires voltage context from current flood-fill pass):
+ * - NPN: Conducts (C→E) if positiveReachable.has(baseNodeId)
+ * - PNP: Conducts (E→C) if negativeReachable.has(baseNodeId)
  */
-function componentConducts(component: CircuitComponent): boolean {
+function componentConducts(
+  component: CircuitComponent,
+  cache: Map<string, string[]>,
+  positiveReachable?: Set<string>,
+  negativeReachable?: Set<string>
+): boolean {
   const def = getDefinition(component.type);
+  
+  // ---- TRANSISTOR CONDUCTIVITY (Dynamic Switching) ----
+  // Transistors have isConductive=false in their definition, but can
+  // conduct DYNAMICALLY when their base pin is at the correct voltage.
+  if (component.type === 'npn_transistor' || component.type === 'pnp_transistor') {
+    // Without voltage context (first pass), transistors don't conduct
+    if (!positiveReachable || !negativeReachable) return false;
+    
+    const basePin = component.pins.find(p => p.pinType === 'base');
+    if (!basePin?.connectedNodeId) return false;
+    
+    const baseGroup = cache.get(basePin.connectedNodeId) || [basePin.connectedNodeId];
+    
+    if (component.type === 'npn_transistor') {
+      // NPN: Base must be POSITIVE → Collector-to-Emitter conducts
+      return baseGroup.some(n => positiveReachable.has(n));
+    } else {
+      // PNP: Base must be NEGATIVE → Emitter-to-Collector conducts
+      return baseGroup.some(n => negativeReachable.has(n));
+    }
+  }
   
   // Non-conductive components never pass current
   if (!def.isConductive) return false;
@@ -229,13 +260,17 @@ function componentConducts(component: CircuitComponent): boolean {
  * Returns all reachable node IDs
  * 
  * @param direction - 'forward' (from +) respects polarity, 'backward' (from -) reverses it
+ * @param positiveCtx - Current positiveReachable set (for transistor base checks)
+ * @param negativeCtx - Current negativeReachable set (for transistor base checks)
  */
 function floodFill(
   startNodes: Set<string>,
   wireAdjacency: Map<string, Set<string>>,
   componentAdjacency: Map<string, ComponentConnection[]>,
   cache: Map<string, string[]>,
-  direction: 'forward' | 'backward'
+  direction: 'forward' | 'backward',
+  positiveCtx?: Set<string>,
+  negativeCtx?: Set<string>
 ): Set<string> {
   const reachable = new Set<string>();
   const visited = new Set<string>();
@@ -285,8 +320,8 @@ function floodFill(
     for (const conn of componentConnections) {
       const { component, pinType, otherPinNodeIds } = conn;
       
-      // Skip non-conducting components (open switches, etc.)
-      if (!componentConducts(component)) continue;
+      // Skip non-conducting components (open switches, inactive transistors, etc.)
+      if (!componentConducts(component, cache, positiveCtx, negativeCtx)) continue;
       
       // POLARITY CHECK (trait-driven: applies to any isPolarized component)
       const def = getDefinition(component.type);
@@ -491,23 +526,46 @@ export function evaluateCircuit(
     };
   }
   
-  // === STEP 2: FLOOD FILL from POSITIVE (forward direction) ===
-  const positiveReachable = floodFill(
-    batteryPositive,
-    wireAdjacency,
-    componentAdjacency,
-    connectionCache,
-    'forward'
-  );
+  // === STEP 2 & 3: MULTI-PASS FLOOD FILL WITH STABILIZATION ===
+  // Transistors create a chicken-and-egg problem: their conductivity depends
+  // on voltage state that is computed BY the flood-fill. We solve this by
+  // iterating until the reachable sets stabilize (no new nodes energized).
+  let positiveReachable = new Set<string>();
+  let negativeReachable = new Set<string>();
+  const MAX_STABILIZATION_PASSES = 10;
   
-  // === STEP 3: FLOOD FILL from NEGATIVE (backward direction) ===
-  const negativeReachable = floodFill(
-    batteryNegative,
-    wireAdjacency,
-    componentAdjacency,
-    connectionCache,
-    'backward'
-  );
+  for (let pass = 0; pass < MAX_STABILIZATION_PASSES; pass++) {
+    // Flood from POSITIVE (forward direction) — passing current context for transistor checks
+    const newPositive = floodFill(
+      batteryPositive,
+      wireAdjacency,
+      componentAdjacency,
+      connectionCache,
+      'forward',
+      positiveReachable,  // Previous pass context
+      negativeReachable,
+    );
+    
+    // Flood from NEGATIVE (backward direction)
+    const newNegative = floodFill(
+      batteryNegative,
+      wireAdjacency,
+      componentAdjacency,
+      connectionCache,
+      'backward',
+      newPositive,         // Use UPDATED positive set for PNP base checks
+      negativeReachable,
+    );
+    
+    // Check if sets have stabilized (no new nodes energized)
+    const hasChanged = newPositive.size !== positiveReachable.size ||
+                       newNegative.size !== negativeReachable.size;
+    
+    positiveReachable = newPositive;
+    negativeReachable = newNegative;
+    
+    if (!hasChanged) break; // Stable — no transistors changed state
+  }
   
   // === STEP 4: EVALUATE EACH COMPONENT (Trait-Driven) ===
   let hasActiveLoad = false;
@@ -523,7 +581,7 @@ export function evaluateCircuit(
     // they can still be "active" based on voltage potential - isConductive only
     // affects flood-fill traversal, not activation evaluation.
     const def = getDefinition(component.type);
-    if (def.isConductive && !componentConducts(component)) continue;
+    if (def.isConductive && !componentConducts(component, connectionCache, positiveReachable, negativeReachable)) continue;
     
     const pins = component.pins.filter(p => p.connectedNodeId);
     if (pins.length < 2) continue;
