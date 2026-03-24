@@ -3,6 +3,7 @@
 // ============================================
 // LED SVG COMPONENT
 // Visual representation of a Light Emitting Diode
+// Dynamic leads stretch from body edge to pin positions
 // ============================================
 
 import React from "react";
@@ -38,14 +39,15 @@ export const LED: React.FC<LEDProps> = React.memo(
     const x2 = cathodeNode.canvasPosition.x;
     const y2 = cathodeNode.canvasPosition.y;
 
-    // Calculate center and rotation
+    // Calculate center, rotation, and DYNAMIC distance
     const centerX = (x1 + x2) / 2;
     const centerY = (y1 + y2) / 2;
     const angle = Math.atan2(y2 - y1, x2 - x1) * (180 / Math.PI);
+    const length = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
 
-    // LED dimensions
-    const bodyRadius = 8;
-    const bodyHeight = 12;
+    // LED body dimensions (fixed — NOT stretched)
+    const bodyRadiusX = 8;
+    const bodyRadiusY = 6;
 
     // Glow filter ID
     const glowFilterId = `led-glow-${component.id}`;
@@ -98,8 +100,8 @@ export const LED: React.FC<LEDProps> = React.memo(
           <ellipse
             cx={0}
             cy={0}
-            rx={bodyRadius + 5}
-            ry={bodyHeight / 2 + 5}
+            rx={bodyRadiusX + 5}
+            ry={bodyRadiusY + 5}
             fill="none"
             stroke={COLORS.SELECTION_HIGHLIGHT}
             strokeWidth={2}
@@ -107,12 +109,34 @@ export const LED: React.FC<LEDProps> = React.memo(
           />
         )}
 
+        {/* DYNAMIC Anode lead — stretches from body edge to anode pin position */}
+        <line
+          x1={-length / 2}
+          y1={0}
+          x2={-bodyRadiusX - 1}
+          y2={0}
+          stroke="#888"
+          strokeWidth={2}
+          strokeLinecap="round"
+        />
+
+        {/* DYNAMIC Cathode lead — stretches from body edge to cathode pin position */}
+        <line
+          x1={bodyRadiusX + 1}
+          y1={0}
+          x2={length / 2}
+          y2={0}
+          stroke="#888"
+          strokeWidth={2}
+          strokeLinecap="round"
+        />
+
         {/* LED body (dome shape) */}
         <ellipse
           cx={0}
           cy={0}
-          rx={bodyRadius}
-          ry={bodyHeight / 2}
+          rx={bodyRadiusX}
+          ry={bodyRadiusY}
           fill={`url(#led-gradient-${component.id})`}
           stroke={isLit ? ledColor : "#555"}
           strokeWidth={1.5}
@@ -121,7 +145,7 @@ export const LED: React.FC<LEDProps> = React.memo(
 
         {/* LED flat bottom (cathode side indicator) */}
         <rect
-          x={bodyRadius - 3}
+          x={bodyRadiusX - 3}
           y={-3}
           width={3}
           height={6}
@@ -139,30 +163,10 @@ export const LED: React.FC<LEDProps> = React.memo(
           opacity={isLit ? 0.6 : 0.3}
         />
 
-        {/* Anode leg line */}
-        <line
-          x1={-bodyRadius - 2}
-          y1={0}
-          x2={-bodyRadius - 8}
-          y2={0}
-          stroke="#888"
-          strokeWidth={2}
-        />
-
-        {/* Cathode leg line */}
-        <line
-          x1={bodyRadius + 2}
-          y1={0}
-          x2={bodyRadius + 8}
-          y2={0}
-          stroke="#888"
-          strokeWidth={2}
-        />
-
         {/* Polarity markers */}
         <text
-          x={-bodyRadius - 10}
-          y={-6}
+          x={-bodyRadiusX - 6}
+          y={-8}
           fill="#666"
           fontSize="8"
           textAnchor="middle"
@@ -170,8 +174,8 @@ export const LED: React.FC<LEDProps> = React.memo(
           +
         </text>
         <text
-          x={bodyRadius + 10}
-          y={-6}
+          x={bodyRadiusX + 6}
+          y={-8}
           fill="#666"
           fontSize="8"
           textAnchor="middle"

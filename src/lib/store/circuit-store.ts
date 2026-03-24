@@ -196,6 +196,12 @@ interface CircuitStoreState {
   // Component placement mode
   placementComponent: ComponentType | null;
   placementPins: string[]; // Node IDs for each pin during placement
+  
+  // History for Undo/Redo
+  history: {
+    past: { components: CircuitComponent[]; wires: Wire[] }[];
+    future: { components: CircuitComponent[]; wires: Wire[] }[];
+  };
 }
 
 // ---- Store Actions Interface ----
@@ -226,7 +232,12 @@ interface CircuitStoreActions {
   
   // General
   clearAll: () => void;
-  loadCircuit: (components: CircuitComponent[], wires: Wire[]) => void;
+  loadCircuit: (components: CircuitComponent[], wires: Wire[], isHistory?: boolean) => void;
+  
+  // History Actions
+  undo: () => void;
+  redo: () => void;
+  saveSnapshot: () => void;
   
   // Initialize
   initialize: () => void;
@@ -295,6 +306,7 @@ const initialState: CircuitStoreState = {
   negativeNodes: new Set(),
   placementComponent: null,
   placementPins: [],
+  history: { past: [], future: [] },
 };
 
 // ---- Create Store ----
@@ -402,6 +414,8 @@ export const useCircuitStore = create<CircuitStore>()(
           return;
         }
         
+        get().saveSnapshot();
+        
         // Create new wire
         const newWire: Wire = {
           id: generateId(),
@@ -427,6 +441,7 @@ export const useCircuitStore = create<CircuitStore>()(
       setSelectedColor: (color) => set({ selectedColor: color }),
       
       removeWire: (wireId) => {
+        get().saveSnapshot();
         set((state) => ({
           wires: state.wires.filter((w) => w.id !== wireId),
         }));
@@ -457,6 +472,7 @@ export const useCircuitStore = create<CircuitStore>()(
         
         // Check if we have all pins placed
         if (newPins.length >= definition.pinCount) {
+          get().saveSnapshot();
           // Create the component
           const componentId = generateId();
           const pins = createComponentPins(state.placementComponent, componentId);
@@ -532,6 +548,8 @@ export const useCircuitStore = create<CircuitStore>()(
         
         if (!component) return;
         
+        get().saveSnapshot();
+        
         // Free up nodes
         const updatedNodes = new Map(state.nodes);
         component.pins.forEach((pin) => {
@@ -566,6 +584,8 @@ export const useCircuitStore = create<CircuitStore>()(
         const component = state.components.find((c) => c.id === componentId);
         
         if (!component || component.type !== 'switch') return;
+        
+        get().saveSnapshot();
         
         const currentState = component.state as SwitchState;
         const newComponents = state.components.map((c) => {
@@ -625,6 +645,7 @@ export const useCircuitStore = create<CircuitStore>()(
       
       // ---- General ----
       clearAll: () => {
+        get().saveSnapshot();
         const freshNodes = createBreadboardNodes();
         set({
           ...initialState,
@@ -632,7 +653,8 @@ export const useCircuitStore = create<CircuitStore>()(
         });
       },
       
-      loadCircuit: (components, wires) => {
+      loadCircuit: (components, wires, isHistory = false) => {
+        if (!isHistory) get().saveSnapshot();
         const freshNodes = createBreadboardNodes();
         
         // Mark occupied nodes
@@ -658,6 +680,68 @@ export const useCircuitStore = create<CircuitStore>()(
         });
         
         get().runSimulation();
+      },
+      
+      // ---- History Actions ----
+      saveSnapshot: () => {
+        set((state) => {
+          const snapshot = {
+            components: JSON.parse(JSON.stringify(state.components)),
+            wires: JSON.parse(JSON.stringify(state.wires)),
+          };
+          return {
+            history: {
+              past: [...state.history.past, snapshot].slice(-50),
+              future: [],
+            },
+          };
+        });
+      },
+      
+      undo: () => {
+        const state = get();
+        if (state.history.past.length === 0) return;
+        
+        const past = [...state.history.past];
+        const previous = past.pop()!;
+        
+        const current = {
+          components: JSON.parse(JSON.stringify(state.components)),
+          wires: JSON.parse(JSON.stringify(state.wires)),
+        };
+        
+        // Set history first so loadCircuit doesn't overwrite it
+        set({
+          history: {
+            past,
+            future: [current, ...state.history.future],
+          },
+        });
+        
+        get().loadCircuit(previous.components, previous.wires, true);
+      },
+      
+      redo: () => {
+        const state = get();
+        if (state.history.future.length === 0) return;
+        
+        const future = [...state.history.future];
+        const next = future.shift()!;
+        
+        const current = {
+          components: JSON.parse(JSON.stringify(state.components)),
+          wires: JSON.parse(JSON.stringify(state.wires)),
+        };
+        
+        // Set history first so loadCircuit doesn't overwrite it
+        set({
+          history: {
+            past: [...state.history.past, current],
+            future,
+          },
+        });
+        
+        get().loadCircuit(next.components, next.wires, true);
       },
       
       initialize: () => {

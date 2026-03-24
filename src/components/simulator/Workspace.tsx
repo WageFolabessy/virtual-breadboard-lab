@@ -27,7 +27,6 @@ import {
   asCapacitorState,
   asBuzzerState,
 } from "@/lib/types";
-import { RENDER } from "@/lib/constants";
 import { StatusIndicator } from "@/components/ui/StatusIndicator";
 import { KbdShortcut } from "@/components/ui/KbdShortcut";
 import { Breadboard } from "./Breadboard";
@@ -49,6 +48,7 @@ import {
   useComponentActiveChecker,
 } from "@/hooks/useCircuitActions";
 import { useCanvasInteraction } from "@/hooks/useCanvasInteraction";
+import { usePanZoom } from "@/hooks/usePanZoom";
 
 // ---- Isolated Wire Preview Component ----
 // Uses useSyncExternalStore to subscribe to ref-based state without triggering parent re-renders
@@ -105,9 +105,19 @@ export const Workspace: React.FC = () => {
   const { selectComponent, removeWire, toggleSwitch, removeComponent } =
     useCircuitActions();
   const isComponentActive = useComponentActiveChecker(components, activeNodes);
+  const {
+    containerRef: panZoomContainerRef,
+    state: panZoomState,
+    isPanning,
+    actions: panZoomActions,
+    handlers: panZoomHandlers,
+  } = usePanZoom();
   const { svgRef, handleMouseMove, handleSvgClick } = useCanvasInteraction(
     wireStartNodeId,
     () => selectComponent(null),
+    panZoomState.scale,
+    panZoomState.panX,
+    panZoomState.panY,
   );
 
   // ---- Loading gate ----
@@ -130,18 +140,28 @@ export const Workspace: React.FC = () => {
         {/* Left Sidebar */}
         <ComponentLibrary />
 
-        {/* Main Canvas Area */}
-        <div className="flex-1 overflow-auto p-8 flex items-start justify-center">
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            {/* SVG Canvas */}
-            <svg
-              ref={svgRef}
-              width={RENDER.BOARD_WIDTH}
-              height={RENDER.BOARD_HEIGHT}
-              viewBox={`0 0 ${RENDER.BOARD_WIDTH} ${RENDER.BOARD_HEIGHT}`}
-              onMouseMove={handleMouseMove}
-              onClick={handleSvgClick}
-              className="block"
+        {/* Main Canvas Area — infinite-canvas with pan/zoom */}
+        <div
+          ref={panZoomContainerRef}
+          className="flex-1 relative overflow-hidden bg-gray-200"
+          style={{ cursor: isPanning ? "grabbing" : "crosshair" }}
+          onWheel={panZoomHandlers.onWheel}
+          onMouseDown={panZoomHandlers.onMouseDown}
+        >
+          {/* SVG Canvas — fills container, zoom/pan via native <g> transform for crisp vectors */}
+          <svg
+            ref={svgRef}
+            width="100%"
+            height="100%"
+            onMouseMove={handleMouseMove}
+            onClick={handleSvgClick}
+            className="block"
+            textRendering="geometricPrecision"
+            shapeRendering="geometricPrecision"
+          >
+            {/* Master transform group — all content scales as lossless vectors */}
+            <g
+              transform={`translate(${panZoomState.panX}, ${panZoomState.panY}) scale(${panZoomState.scale})`}
             >
               <Breadboard />
 
@@ -266,20 +286,49 @@ export const Workspace: React.FC = () => {
                   return null;
                 })}
               </g>
-            </svg>
+            </g>
+          </svg>
 
-            {/* Status Bar */}
-            <div className="mt-4 pt-4 border-t border-gray-200 flex items-center justify-between text-sm text-gray-500">
-              <div>
-                Components: {components.length} | Wires: {wires.length}
-              </div>
-              <div className="flex items-center gap-4">
-                <KbdShortcut shortcut="V" label="Select" />
-                <KbdShortcut shortcut="W" label="Wire" />
-                <KbdShortcut shortcut="D" label="Delete" />
-                <KbdShortcut shortcut="ESC" label="Cancel" />
-              </div>
-            </div>
+          {/* Zoom Controls — floating panel bottom-right */}
+          <div className="absolute bottom-4 right-4 flex items-center gap-1 bg-white/90 backdrop-blur-sm border border-gray-300 rounded-lg shadow-lg px-2 py-1.5 select-none">
+            <button
+              onClick={panZoomActions.zoomOut}
+              className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-gray-100 active:bg-gray-200 text-gray-700 font-bold text-lg transition-colors"
+              title="Zoom Out"
+            >
+              −
+            </button>
+            <span className="w-14 text-center text-xs font-mono text-gray-600 tabular-nums">
+              {Math.round(panZoomState.scale * 100)}%
+            </span>
+            <button
+              onClick={panZoomActions.zoomIn}
+              className="w-8 h-8 flex items-center justify-center rounded-md hover:bg-gray-100 active:bg-gray-200 text-gray-700 font-bold text-lg transition-colors"
+              title="Zoom In"
+            >
+              +
+            </button>
+            <div className="w-px h-5 bg-gray-300 mx-1" />
+            <button
+              onClick={panZoomActions.resetView}
+              className="px-2 h-8 flex items-center justify-center rounded-md hover:bg-gray-100 active:bg-gray-200 text-gray-600 text-xs font-medium transition-colors"
+              title="Reset Zoom & Pan"
+            >
+              Reset
+            </button>
+          </div>
+
+          {/* Canvas Info Bar — bottom-left */}
+          <div className="absolute bottom-4 left-4 flex items-center gap-4 bg-white/90 backdrop-blur-sm border border-gray-300 rounded-lg shadow-lg px-3 py-1.5 text-xs text-gray-500">
+            <span>Components: {components.length}</span>
+            <span>Wires: {wires.length}</span>
+            <div className="w-px h-4 bg-gray-300" />
+            <KbdShortcut shortcut="V" label="Select" />
+            <KbdShortcut shortcut="W" label="Wire" />
+            <KbdShortcut shortcut="D" label="Delete" />
+            <KbdShortcut shortcut="ESC" label="Cancel" />
+            <div className="w-px h-4 bg-gray-300" />
+            <span className="text-gray-400">Scroll: Zoom | Ctrl+Drag: Pan</span>
           </div>
         </div>
 

@@ -146,19 +146,6 @@ export const ComponentLibrary: React.FC = () => {
           </button>
         </div>
       )}
-
-      {/* Instructions */}
-      <div className="p-4 bg-gray-100 border-t border-gray-200">
-        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-          Instructions
-        </h3>
-        <ul className="text-xs text-gray-600 space-y-1">
-          <li>1. Add a battery (power source)</li>
-          <li>2. Add an LED</li>
-          <li>3. Connect with wires (W key)</li>
-          <li>4. Complete the circuit!</li>
-        </ul>
-      </div>
     </div>
   );
 };

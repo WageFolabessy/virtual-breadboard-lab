@@ -3,6 +3,7 @@
 // ============================================
 // BUZZER SVG COMPONENT
 // Piezo buzzer that makes sound when active
+// Dynamic leads stretch from body edge to pin positions
 // ============================================
 
 import React, { useEffect, useRef } from "react";
@@ -96,6 +97,7 @@ export const Buzzer: React.FC<BuzzerProps> = React.memo(
     const centerX = (x1 + x2) / 2;
     const centerY = (y1 + y2) / 2;
     const angle = Math.atan2(y2 - y1, x2 - x1) * (180 / Math.PI);
+    const length = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
 
     const radius = 12;
 
@@ -130,6 +132,28 @@ export const Buzzer: React.FC<BuzzerProps> = React.memo(
             strokeDasharray="4 2"
           />
         )}
+
+        {/* DYNAMIC Positive lead — stretches from body edge to pin position */}
+        <line
+          x1={-length / 2}
+          y1={0}
+          x2={-radius - 1}
+          y2={0}
+          stroke={isActive ? COLORS.POWER_RAIL : "#888"}
+          strokeWidth={2}
+          strokeLinecap="round"
+        />
+
+        {/* DYNAMIC Negative lead — stretches from body edge to pin position */}
+        <line
+          x1={radius + 1}
+          y1={0}
+          x2={length / 2}
+          y2={0}
+          stroke={isActive ? COLORS.POWER_RAIL : "#888"}
+          strokeWidth={2}
+          strokeLinecap="round"
+        />
 
         {/* Buzzer body */}
         <circle
@@ -170,24 +194,6 @@ export const Buzzer: React.FC<BuzzerProps> = React.memo(
             />
           </>
         )}
-
-        {/* Leads - use red/blue for active state instead of green */}
-        <line
-          x1={-radius - 2}
-          y1={0}
-          x2={-radius - 10}
-          y2={0}
-          stroke={isActive ? COLORS.POWER_RAIL : "#888"}
-          strokeWidth={2}
-        />
-        <line
-          x1={radius + 2}
-          y1={0}
-          x2={radius + 10}
-          y2={0}
-          stroke={isActive ? COLORS.POWER_RAIL : "#888"}
-          strokeWidth={2}
-        />
 
         {/* Polarity markers */}
         <text
