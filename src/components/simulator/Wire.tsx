@@ -81,8 +81,17 @@ export const Wire: React.FC<WireProps> = React.memo(
       }
     };
 
+    // Wire opacity: 0.7 default, 1.0 when selected or hovered (CSS handles hover)
+    const wireOpacity = isSelected ? 1.0 : 0.7;
+
     return (
-      <g className="wire-group">
+      <g
+        className="wire-group"
+        opacity={wireOpacity}
+        style={{
+          transition: "opacity 0.15s ease",
+        }}
+      >
         {/* Wire shadow */}
         <path
           d={pathD}
@@ -121,7 +130,7 @@ export const Wire: React.FC<WireProps> = React.memo(
           />
         )}
 
-        {/* Main wire - ALWAYS uses user's chosen color, thicker when selected */}
+        {/* Main wire — ALWAYS uses user's chosen color, thicker when selected */}
         <path
           d={pathD}
           fill="none"
@@ -130,18 +139,28 @@ export const Wire: React.FC<WireProps> = React.memo(
           strokeLinecap="round"
         />
 
-        {/* Invisible wider path for easier click detection */}
+        {/* Invisible wider path for easier click detection + hover opacity boost */}
         <path
           d={pathD}
           fill="none"
           stroke="transparent"
           strokeWidth={RENDER.WIRE_WIDTH + 10}
           strokeLinecap="round"
-          style={{ cursor: selectedTool === "delete" ? "pointer" : "pointer" }}
+          style={{ cursor: "pointer" }}
           onClick={handleClick}
+          onMouseEnter={(e) => {
+            // Boost opacity on hover via parent group
+            const group = (e.currentTarget as SVGElement).parentElement;
+            if (group) group.style.opacity = "1";
+          }}
+          onMouseLeave={(e) => {
+            // Restore default opacity (unless selected)
+            const group = (e.currentTarget as SVGElement).parentElement;
+            if (group && !isSelected) group.style.opacity = String(wireOpacity);
+          }}
         />
 
-        {/* Wire endpoints - ALWAYS use wire's color, larger when selected */}
+        {/* Wire endpoints — ALWAYS use wire's color, larger when selected */}
         <circle cx={x1} cy={y1} r={isSelected ? 4 : 3} fill={wireColor} />
         <circle cx={x2} cy={y2} r={isSelected ? 4 : 3} fill={wireColor} />
       </g>

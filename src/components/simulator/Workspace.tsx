@@ -182,32 +182,7 @@ export const Workspace: React.FC = () => {
             >
               <Breadboard />
 
-              {/* Wires Layer */}
-              <g className="wires-layer">
-                {wires.map((wire) => {
-                  const isActive =
-                    activeNodes.has(wire.startNodeId) &&
-                    activeNodes.has(wire.endNodeId);
-                  const isSelected = selectedWireId === wire.id; // NEW
-
-                  return (
-                    <Wire
-                      key={wire.id}
-                      wire={wire}
-                      nodes={nodes}
-                      isActive={isActive}
-                      isSelected={isSelected}
-                      selectedTool={selectedTool}
-                      onSelect={selectWire}
-                      onDelete={removeWire}
-                    />
-                  );
-                })}
-
-                <IsolatedWirePreview color={selectedColor} />
-              </g>
-
-              {/* Components Layer */}
+              {/* Layer 2: Components (rendered first = visually behind wires) */}
               <g className="components-layer">
                 {components.map((component) => {
                   const isSelected = selectedComponentId === component.id;
@@ -335,6 +310,31 @@ export const Workspace: React.FC = () => {
 
                   return null;
                 })}
+              </g>
+
+              {/* Layer 3: Wires (rendered last = visually on top of components) */}
+              <g className="wires-layer">
+                {wires.map((wire) => {
+                  const isActive =
+                    activeNodes.has(wire.startNodeId) &&
+                    activeNodes.has(wire.endNodeId);
+                  const isSelected = selectedWireId === wire.id;
+
+                  return (
+                    <Wire
+                      key={wire.id}
+                      wire={wire}
+                      nodes={nodes}
+                      isActive={isActive}
+                      isSelected={isSelected}
+                      selectedTool={selectedTool}
+                      onSelect={selectWire}
+                      onDelete={removeWire}
+                    />
+                  );
+                })}
+
+                <IsolatedWirePreview color={selectedColor} />
               </g>
             </g>
           </svg>
