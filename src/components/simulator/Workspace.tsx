@@ -99,12 +99,19 @@ export const Workspace: React.FC = () => {
   const selectedComponentId = useCircuitStore(
     (state) => state.selectedComponentId,
   );
+  const selectedWireId = useCircuitStore((state) => state.selectedWireId); // NEW
+  const selectedTool = useCircuitStore((state) => state.selectedTool); // NEW
 
   // ---- Hooks ----
   const { isInitialized } = useHydration();
   const { selectComponent, removeWire, toggleSwitch, removeComponent } =
     useCircuitActions();
   const isComponentActive = useComponentActiveChecker(components, activeNodes);
+  
+  // NEW: Wire selection action
+  const selectWire = (wireId: string | null) => {
+    useCircuitStore.getState().selectWire(wireId);
+  };
   const {
     containerRef: panZoomContainerRef,
     state: panZoomState,
@@ -171,6 +178,7 @@ export const Workspace: React.FC = () => {
                   const isActive =
                     activeNodes.has(wire.startNodeId) &&
                     activeNodes.has(wire.endNodeId);
+                  const isSelected = selectedWireId === wire.id; // NEW
 
                   return (
                     <Wire
@@ -178,6 +186,9 @@ export const Workspace: React.FC = () => {
                       wire={wire}
                       nodes={nodes}
                       isActive={isActive}
+                      isSelected={isSelected}
+                      selectedTool={selectedTool}
+                      onSelect={selectWire}
                       onDelete={removeWire}
                     />
                   );
@@ -478,6 +489,57 @@ export const Workspace: React.FC = () => {
                       className="mt-2 w-full px-3 py-1.5 bg-red-50 text-red-600 text-sm rounded hover:bg-red-100 transition-colors"
                     >
                       Delete Component
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+
+          {/* Selected Wire Info */}
+          {selectedWireId &&
+            (() => {
+              const wire = wires.find((w) => w.id === selectedWireId);
+              if (!wire) return null;
+
+              const startNode = nodes.get(wire.startNodeId);
+              const endNode = nodes.get(wire.endNodeId);
+
+              return (
+                <div className="bg-white rounded-lg p-4 border border-gray-200 mb-4">
+                  <h3 className="text-sm font-semibold text-gray-600 mb-2">
+                    Selected Wire
+                  </h3>
+                  <div className="space-y-2 text-sm">
+                    <p>
+                      <span className="text-gray-500">Color:</span>{" "}
+                      <span 
+                        className="inline-block w-4 h-4 rounded border border-gray-300 align-middle ml-1"
+                        style={{ backgroundColor: wire.color }}
+                      />
+                    </p>
+                    <p>
+                      <span className="text-gray-500">Start Node:</span>{" "}
+                      <span className="font-mono text-xs">
+                        {startNode?.id || 'Unknown'}
+                      </span>
+                    </p>
+                    <p>
+                      <span className="text-gray-500">End Node:</span>{" "}
+                      <span className="font-mono text-xs">
+                        {endNode?.id || 'Unknown'}
+                      </span>
+                    </p>
+                    <p>
+                      <span className="text-gray-500">ID:</span>{" "}
+                      <span className="font-mono text-xs">
+                        {wire.id.slice(0, 8)}...
+                      </span>
+                    </p>
+                    <button
+                      onClick={() => removeWire(selectedWireId)}
+                      className="mt-2 w-full px-3 py-1.5 bg-red-50 text-red-600 text-sm rounded hover:bg-red-100 transition-colors"
+                    >
+                      Delete Wire
                     </button>
                   </div>
                 </div>

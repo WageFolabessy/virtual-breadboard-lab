@@ -185,6 +185,7 @@ interface CircuitStoreState {
   // UI State
   selectedTool: ToolType;
   selectedComponentId: string | null;
+  selectedWireId: string | null; // NEW: Selected wire (mutually exclusive with selectedComponentId)
   wireStartNodeId: string | null;
   
   // Simulation results
@@ -218,6 +219,7 @@ interface CircuitStoreActions {
   cancelWire: () => void;
   setSelectedColor: (color: string) => void;
   removeWire: (wireId: string) => void;
+  selectWire: (wireId: string | null) => void; // NEW: Select a wire
   
   // Component actions
   startComponentPlacement: (type: ComponentType) => void;
@@ -226,6 +228,9 @@ interface CircuitStoreActions {
   removeComponent: (componentId: string) => void;
   selectComponent: (componentId: string | null) => void;
   toggleSwitch: (componentId: string) => void;
+  
+  // Generic delete action
+  deleteSelected: () => void; // NEW: Delete currently selected component or wire
   
   // Simulation
   runSimulation: () => void;
@@ -290,6 +295,7 @@ const initialState: CircuitStoreState = {
   selectedColor: COLORS.PALETTE_RED,
   selectedTool: 'select',
   selectedComponentId: null,
+  selectedWireId: null, // NEW: No wire selected initially
   wireStartNodeId: null,
   simulation: {
     status: 'incomplete',
@@ -444,6 +450,8 @@ export const useCircuitStore = create<CircuitStore>()(
         get().saveSnapshot();
         set((state) => ({
           wires: state.wires.filter((w) => w.id !== wireId),
+          // Clear selection if this wire was selected
+          selectedWireId: state.selectedWireId === wireId ? null : state.selectedWireId,
         }));
         get().runSimulation();
       },
@@ -576,7 +584,8 @@ export const useCircuitStore = create<CircuitStore>()(
       },
       
       selectComponent: (componentId) => {
-        set({ selectedComponentId: componentId });
+        // MUTUAL EXCLUSIVITY: Selecting a component clears wire selection
+        set({ selectedComponentId: componentId, selectedWireId: null });
       },
       
       toggleSwitch: (componentId) => {
@@ -600,6 +609,29 @@ export const useCircuitStore = create<CircuitStore>()(
         
         set({ components: newComponents });
         get().runSimulation();
+      },
+      
+      // ---- Wire Selection ----
+      selectWire: (wireId) => {
+        // MUTUAL EXCLUSIVITY: Selecting a wire clears component selection
+        set({ selectedWireId: wireId, selectedComponentId: null });
+      },
+      
+      // ---- Generic Delete Action ----
+      deleteSelected: () => {
+        const state = get();
+        
+        // Delete selected component
+        if (state.selectedComponentId) {
+          get().removeComponent(state.selectedComponentId);
+          return;
+        }
+        
+        // Delete selected wire
+        if (state.selectedWireId) {
+          get().removeWire(state.selectedWireId);
+          return;
+        }
       },
       
       // ---- Simulation ----
