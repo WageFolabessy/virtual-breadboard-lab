@@ -1,31 +1,66 @@
 // ============================================
-// CIRCUIT EVALUATOR ENGINE v4.0
-// 2-Way Flood Fill Algorithm for Parallel Circuits
+// CIRCUIT EVALUATOR ENGINE v5.1
+// Trait-Driven 2-Way Flood Fill for Parallel Circuits
 // ============================================
 // 
 // ELECTRICAL REALITY:
 // 1. Electricity flows through ALL available paths simultaneously (parallel circuits)
 // 2. A component is active if its input touches POSITIVE and output touches NEGATIVE
 // 3. Short Circuit: Direct wire path from + to - without any load
-// 4. LED Polarity: Anode must be on positive side, Cathode on negative side
+// 4. Polarized components only allow flow in one direction (Anode→Cathode)
 // 
 // ALGORITHM:
 // Step 1: Flood from Battery+ → find all "positiveReachable" nodes
 // Step 2: Flood from Battery- → find all "negativeReachable" nodes
 // Step 3: For each component, check if pins span both sets
 // Step 4: Detect short circuits (wire-only path from + to -)
+//
+// TRAIT-DRIVEN DESIGN (AGENTS.md Mandate):
+// Components are evaluated PURELY by their universal traits (isLoad, isPolarized,
+// isConductive) from COMPONENT_DEFINITIONS — NEVER by hardcoded type strings.
+// This ensures any new component added to the dictionary works automatically.
 // ============================================
 
 import {
   BreadboardNode,
   CircuitComponent,
   Wire,
-  LEDState,
-  BatteryState,
-  SwitchState,
-  BuzzerState,
   ComponentState,
+  ComponentDefinition,
 } from '../types';
+import { COMPONENT_DEFINITIONS, MAX_EVALUATION_STEPS } from '../constants';
+
+// ---- Trait Lookup Helper ----
+// Returns the universal definition for a given component type.
+// Falls back to a safe default if the type is unknown.
+const FALLBACK_DEFINITION: ComponentDefinition = {
+  type: 'unknown' as never,
+  name: 'Unknown',
+  description: '',
+  pinCount: 2,
+  pinTypes: ['terminal-1', 'terminal-2'],
+  defaultState: {},
+  icon: '?',
+  isLoad: false,
+  isPolarized: false,
+  isConductive: true, // Safe default: allows current through
+  isPowerSource: false, // Unknown components are not power sources
+};
+
+function getDefinition(type: string): ComponentDefinition {
+  return COMPONENT_DEFINITIONS[type] ?? FALLBACK_DEFINITION;
+}
+
+// ---- Pin Type Helpers (Trait-Driven) ----
+// Determines if a pin type is a "positive entry" (anode, positive terminal)
+function isPositiveEntryPin(pinType: string): boolean {
+  return pinType === 'anode' || pinType === 'positive';
+}
+
+// Determines if a pin type is a "negative entry" (cathode, negative terminal)
+function isNegativeEntryPin(pinType: string): boolean {
+  return pinType === 'cathode' || pinType === 'negative';
+}
 
 // ---- Circuit Status Types ----
 export type CircuitStatus = 'incomplete' | 'complete' | 'short-circuit';
@@ -42,9 +77,6 @@ export interface SimulationResultV2 {
   positiveReachable: Set<string>;
   negativeReachable: Set<string>;
 }
-
-// Maximum iterations for flood fill (safeguard)
-const MAX_FLOOD_ITERATIONS = 5000;
 
 /**
  * Build connection group cache for O(1) lookups
@@ -115,7 +147,10 @@ function buildComponentAdjacency(
   const adjacency = new Map<string, ComponentConnection[]>();
   
   for (const component of components) {
-    if (component.type === 'battery') continue; // Battery handled separately
+    // Skip power sources (batteries) - they are handled separately as flood fill origins
+    // Trait-driven: Power sources have isLoad=false, isPolarized=true, isConductive=true
+    // but are distinguished by having 'positive'/'negative' pins AND providing voltage
+    if (isPowerSource(component)) continue;
     
     for (const pin of component.pins) {
       if (!pin.connectedNodeId) continue;
@@ -143,20 +178,49 @@ function buildComponentAdjacency(
 }
 
 /**
- * Check if a component conducts in its current state
+ * Trait-driven check: Is this component a power source?
+ * Uses the explicit `isPowerSource` trait from COMPONENT_DEFINITIONS.
  */
-function componentConducts(component: CircuitComponent): boolean {
-  if (component.type === 'switch') {
-    return (component.state as SwitchState).isClosed;
-  }
-  return true;
+function isPowerSource(component: CircuitComponent): boolean {
+  const def = getDefinition(component.type);
+  return def.isPowerSource === true;
 }
 
 /**
- * Check if a component is a load (consumes power)
+ * Trait-driven check: Is this power source currently ON?
+ * Checks the `isOn` state property for power sources.
  */
-function isLoadComponent(type: string): boolean {
-  return ['led', 'resistor', 'buzzer', 'capacitor'].includes(type);
+function isPowerSourceActive(component: CircuitComponent): boolean {
+  if (!isPowerSource(component)) return false;
+  const state = component.state as Record<string, unknown>;
+  // Default to ON if isOn is not explicitly set to false
+  return state.isOn !== false;
+}
+
+/**
+ * Check if a component conducts in its current state.
+ * Uses the universal `isConductive` trait from COMPONENT_DEFINITIONS.
+ * 
+ * TRAIT LOGIC:
+ * - If isConductive=false → never conducts (open circuit component like LED body)
+ * - If isConductive=true → conducts, but may have conditional state
+ *   - If component has 'isClosed' state → only conducts when isClosed=true (switches)
+ *   - Otherwise → always conducts
+ */
+function componentConducts(component: CircuitComponent): boolean {
+  const def = getDefinition(component.type);
+  
+  // Non-conductive components never pass current
+  if (!def.isConductive) return false;
+  
+  // Conductive components may have conditional conductivity (switches)
+  const state = component.state as Record<string, unknown>;
+  if ('isClosed' in state) {
+    return state.isClosed === true;
+  }
+  
+  // Default: conductive components conduct
+  return true;
 }
 
 /**
@@ -164,7 +228,7 @@ function isLoadComponent(type: string): boolean {
  * Traverses through wires and conducting components
  * Returns all reachable node IDs
  * 
- * @param direction - 'forward' (from +) respects LED polarity, 'backward' (from -) reverses it
+ * @param direction - 'forward' (from +) respects polarity, 'backward' (from -) reverses it
  */
 function floodFill(
   startNodes: Set<string>,
@@ -193,8 +257,10 @@ function floodFill(
   
   while (queue.length > 0) {
     iterations++;
-    if (iterations > MAX_FLOOD_ITERATIONS) {
-      console.error('[VBL] Flood fill exceeded max iterations');
+    if (iterations > MAX_EVALUATION_STEPS) {
+      console.warn(
+        `[VBL] Evaluation halted at ${MAX_EVALUATION_STEPS} steps - possible infinite loop or excessively large circuit.`
+      );
       break;
     }
     
@@ -219,15 +285,19 @@ function floodFill(
     for (const conn of componentConnections) {
       const { component, pinType, otherPinNodeIds } = conn;
       
-      // Skip non-conducting components (open switches)
+      // Skip non-conducting components (open switches, etc.)
       if (!componentConducts(component)) continue;
       
-      // LED POLARITY CHECK
-      if (component.type === 'led') {
-        // Forward (from +): Can only ENTER through anode, EXIT through cathode
-        // Backward (from -): Can only ENTER through cathode, EXIT through anode
-        if (direction === 'forward' && pinType !== 'anode') continue;
-        if (direction === 'backward' && pinType !== 'cathode') continue;
+      // POLARITY CHECK (trait-driven: applies to any isPolarized component)
+      const def = getDefinition(component.type);
+      if (def.isPolarized) {
+        // Forward (from +): Can only ENTER through positive-entry pins (anode/positive)
+        // Backward (from -): Can only ENTER through negative-entry pins (cathode/negative)
+        const isPositiveEntry = isPositiveEntryPin(pinType);
+        const isNegativeEntry = isNegativeEntryPin(pinType);
+        
+        if (direction === 'forward' && !isPositiveEntry) continue;
+        if (direction === 'backward' && !isNegativeEntry) continue;
       }
       
       // Add all nodes on the other side of the component
@@ -275,7 +345,12 @@ function checkShortCircuit(
   
   while (queue.length > 0) {
     iterations++;
-    if (iterations > MAX_FLOOD_ITERATIONS) break;
+    if (iterations > MAX_EVALUATION_STEPS) {
+      console.warn(
+        `[VBL] Short-circuit check halted at ${MAX_EVALUATION_STEPS} steps - possible infinite loop or excessively large circuit.`
+      );
+      break;
+    }
     
     const { nodeId, path } = queue.shift()!;
     
@@ -301,27 +376,27 @@ function checkShortCircuit(
 }
 
 /**
- * Find battery and its terminal node IDs
+ * Find active power source and its terminal node IDs (trait-driven)
  */
-function findBattery(
+function findActivePowerSource(
   components: CircuitComponent[],
   cache: Map<string, string[]>
 ): {
-  battery: CircuitComponent | null;
+  powerSource: CircuitComponent | null;
   positiveNodes: Set<string>;
   negativeNodes: Set<string>;
 } {
-  const battery = components.find(
-    c => c.type === 'battery' && (c.state as BatteryState).isOn
-  );
-  
-  if (!battery) {
-    return { battery: null, positiveNodes: new Set(), negativeNodes: new Set() };
+  // Find first active power source
+  const powerSource = components.find(c => isPowerSourceActive(c));
+
+  if (!powerSource) {
+    return { powerSource: null, positiveNodes: new Set(), negativeNodes: new Set() };
   }
   
-  const positivePin = battery.pins.find(p => p.pinType === 'positive');
-  const negativePin = battery.pins.find(p => p.pinType === 'negative');
-  
+  // Find positive and negative terminals (trait-driven by pin type)
+  const positivePin = powerSource.pins.find(p => isPositiveEntryPin(p.pinType));
+  const negativePin = powerSource.pins.find(p => isNegativeEntryPin(p.pinType));
+
   const positiveNodes = new Set(
     positivePin?.connectedNodeId
       ? (cache.get(positivePin.connectedNodeId) || [positivePin.connectedNodeId])
@@ -332,14 +407,15 @@ function findBattery(
       ? (cache.get(negativePin.connectedNodeId) || [negativePin.connectedNodeId])
       : []
   );
-  
-  return { battery, positiveNodes, negativeNodes };
+
+  return { powerSource, positiveNodes, negativeNodes };
 }
 
 /**
  * MAIN CIRCUIT EVALUATION - 2-Way Flood Fill Algorithm
  * 
  * This evaluates ALL components simultaneously, supporting parallel circuits.
+ * Uses TRAIT-DRIVEN logic exclusively - no hardcoded component types.
  */
 export function evaluateCircuit(
   nodes: Map<string, BreadboardNode>,
@@ -358,18 +434,15 @@ export function evaluateCircuit(
     negativeReachable: new Set(),
   };
   
-  // Initialize all component states to OFF
+  // Initialize all component states to OFF (trait-driven)
   for (const component of components) {
-    if (component.type === 'led') {
-      result.componentStates.set(component.id, {
-        ...(component.state as LEDState),
-        isLit: false,
-      });
-    } else if (component.type === 'buzzer') {
-      result.componentStates.set(component.id, {
-        ...(component.state as BuzzerState),
-        isActive: false,
-      });
+    const def = getDefinition(component.type);
+    if (def.isLoad) {
+      // Loads start de-activated: merge default off-state over current state
+      const offState: Record<string, unknown> = { ...component.state as Record<string, unknown> };
+      if ('isLit' in offState) offState.isLit = false;
+      if ('isActive' in offState) offState.isActive = false;
+      result.componentStates.set(component.id, offState as ComponentState);
     } else {
       result.componentStates.set(component.id, component.state);
     }
@@ -380,19 +453,19 @@ export function evaluateCircuit(
   const wireAdjacency = buildWireAdjacency(wires, connectionCache);
   const componentAdjacency = buildComponentAdjacency(components, connectionCache);
   
-  // Find battery
-  const { battery, positiveNodes: batteryPositive, negativeNodes: batteryNegative } = 
-    findBattery(components, connectionCache);
+  // Find active power source (trait-driven)
+  const { powerSource, positiveNodes: batteryPositive, negativeNodes: batteryNegative } = 
+    findActivePowerSource(components, connectionCache);
   
-  if (!battery) {
-    result.message = 'No power source (battery) found';
+  if (!powerSource) {
+    result.message = 'No active power source found';
     return result;
   }
   
-  result.powerSourceId = battery.id;
+  result.powerSourceId = powerSource.id;
   
   if (batteryPositive.size === 0 || batteryNegative.size === 0) {
-    result.message = 'Battery not properly connected to breadboard';
+    result.message = 'Power source not properly connected to breadboard';
     return result;
   }
   
@@ -409,7 +482,7 @@ export function evaluateCircuit(
       status: 'short-circuit',
       isCircuitComplete: false,
       activePath: shortCircuitCheck.path,
-      powerSourceId: battery.id,
+      powerSourceId: powerSource.id,
       componentStates: result.componentStates,
       shortCircuitPath: shortCircuitCheck.path,
       message: 'SHORT CIRCUIT! Direct wire path from + to - without any load',
@@ -436,40 +509,45 @@ export function evaluateCircuit(
     'backward'
   );
   
-  // === STEP 4: EVALUATE EACH COMPONENT ===
-  // A component is ACTIVE if:
-  // - For LED: Anode is in positiveReachable AND Cathode is in negativeReachable
-  // - For other components: One pin in positiveReachable AND other pin in negativeReachable
-  
+  // === STEP 4: EVALUATE EACH COMPONENT (Trait-Driven) ===
   let hasActiveLoad = false;
   const activeComponentIds: string[] = [];
   const allActiveNodes = new Set<string>();
   
   for (const component of components) {
-    if (component.type === 'battery') continue;
-    if (!componentConducts(component)) continue;
+    // Skip power sources
+    if (isPowerSource(component)) continue;
+    
+    // Skip dynamically non-conducting components (e.g., open switches)
+    // NOTE: We DO evaluate loads with isConductive=false (LEDs, resistors) because
+    // they can still be "active" based on voltage potential - isConductive only
+    // affects flood-fill traversal, not activation evaluation.
+    const def = getDefinition(component.type);
+    if (def.isConductive && !componentConducts(component)) continue;
     
     const pins = component.pins.filter(p => p.connectedNodeId);
     if (pins.length < 2) continue;
     
     let isActive = false;
-    
-    if (component.type === 'led') {
-      // LED: Check polarity - anode must be on positive side, cathode on negative
-      const anodePin = pins.find(p => p.pinType === 'anode');
-      const cathodePin = pins.find(p => p.pinType === 'cathode');
+    const compDef = getDefinition(component.type);
+
+    if (compDef.isPolarized) {
+      // Polarized component: positive-entry pin must be on positive side,
+      // negative-entry pin on negative side
+      const positivePin = pins.find(p => isPositiveEntryPin(p.pinType));
+      const negativePin = pins.find(p => isNegativeEntryPin(p.pinType));
       
-      if (anodePin?.connectedNodeId && cathodePin?.connectedNodeId) {
-        const anodeGroup = connectionCache.get(anodePin.connectedNodeId) || [anodePin.connectedNodeId];
-        const cathodeGroup = connectionCache.get(cathodePin.connectedNodeId) || [cathodePin.connectedNodeId];
+      if (positivePin?.connectedNodeId && negativePin?.connectedNodeId) {
+        const posGroup = connectionCache.get(positivePin.connectedNodeId) || [positivePin.connectedNodeId];
+        const negGroup = connectionCache.get(negativePin.connectedNodeId) || [negativePin.connectedNodeId];
         
-        const anodeOnPositive = anodeGroup.some(n => positiveReachable.has(n));
-        const cathodeOnNegative = cathodeGroup.some(n => negativeReachable.has(n));
+        const posOnPositive = posGroup.some(n => positiveReachable.has(n));
+        const negOnNegative = negGroup.some(n => negativeReachable.has(n));
         
-        isActive = anodeOnPositive && cathodeOnNegative;
+        isActive = posOnPositive && negOnNegative;
       }
     } else {
-      // Other 2-pin components: One pin on positive, one on negative
+      // Non-polarized component: pins can be in any orientation
       const pin1 = pins[0];
       const pin2 = pins[1];
       
@@ -498,21 +576,14 @@ export function evaluateCircuit(
         }
       }
       
-      // Update component state
-      if (component.type === 'led') {
-        result.componentStates.set(component.id, {
-          ...(component.state as LEDState),
-          isLit: true,
-        });
+      // Update component state (trait-driven)
+      if (compDef.isLoad) {
         hasActiveLoad = true;
-      } else if (component.type === 'buzzer') {
-        result.componentStates.set(component.id, {
-          ...(component.state as BuzzerState),
-          isActive: true,
-        });
-        hasActiveLoad = true;
-      } else if (isLoadComponent(component.type)) {
-        hasActiveLoad = true;
+        // Activate component: merge active state over current state
+        const activeState: Record<string, unknown> = { ...component.state as Record<string, unknown> };
+        if ('isLit' in activeState) activeState.isLit = true;
+        if ('isActive' in activeState) activeState.isActive = true;
+        result.componentStates.set(component.id, activeState as ComponentState);
       }
     }
   }
@@ -527,7 +598,7 @@ export function evaluateCircuit(
       status: 'complete',
       isCircuitComplete: true,
       activePath: Array.from(allActiveNodes),
-      powerSourceId: battery.id,
+      powerSourceId: powerSource.id,
       componentStates: result.componentStates,
       message: `Circuit complete - ${activeComponentIds.length} component(s) active`,
       positiveReachable,

@@ -6,14 +6,16 @@ import { ComponentDefinition } from './types';
 
 // ---- Breadboard Dimensions ----
 export const BREADBOARD = {
-  // Half-size breadboard: 30 columns
-  COLUMNS: 30,
+  // Full-size MB-102 breadboard: 65 columns (professional engineering standard)
+  COLUMNS: 65,
   
-  // Terminal rows: A-E (top), F-J (bottom)
-  TERMINAL_ROWS_TOP: ['A', 'B', 'C', 'D', 'E'] as const,
-  TERMINAL_ROWS_BOTTOM: ['F', 'G', 'H', 'I', 'J'] as const,
+  // Terminal rows (top-to-bottom visual order, matching real breadboard silkscreen)
+  // Top section: J, I, H, G, F (J at top, F near center trench)
+  // Bottom section: E, D, C, B, A (E near center trench, A at bottom)
+  TERMINAL_ROWS_TOP: ['J', 'I', 'H', 'G', 'F'] as const,
+  TERMINAL_ROWS_BOTTOM: ['E', 'D', 'C', 'B', 'A'] as const,
   
-  // All terminal rows
+  // All terminal rows (top-to-bottom visual order)
   get TERMINAL_ROWS() {
     return [...this.TERMINAL_ROWS_TOP, ...this.TERMINAL_ROWS_BOTTOM] as const;
   },
@@ -62,21 +64,27 @@ export const RENDER = {
 
 // ---- Colors ----
 export const COLORS = {
-  // Board colors
-  BOARD_BACKGROUND: '#E8E4D9',
-  BOARD_BORDER: '#8B7355',
+  // Board colors - realistic off-white plastic appearance
+  BOARD_BACKGROUND: '#F8F9FA',      // Off-white plastic body
+  BOARD_BORDER: '#D1D5DB',          // Light grey edge
+  BOARD_SHADOW: 'rgba(0, 0, 0, 0.15)', // Drop shadow for 3D effect
   
-  // Node colors
-  NODE_EMPTY: '#2D2D2D',
-  NODE_HOVER: '#4A90D9',
-  NODE_OCCUPIED: '#666666',
-  NODE_ACTIVE: '#00FF00',  // Node dengan arus
+  // Node/hole colors - simulating recessed holes in plastic
+  NODE_EMPTY: '#1A1A1A',            // Deep dark hole
+  NODE_INNER_SHADOW: '#0D0D0D',     // Even darker for inset effect
+  NODE_RING: '#2A2A2A',             // Slight ring around hole
+  NODE_HOVER: '#4A90D9',            // Highlight on hover
+  NODE_OCCUPIED: '#404040',         // Slightly lighter when occupied
+  // NODE_ACTIVE removed - use POSITIVE_POTENTIAL/NEGATIVE_POTENTIAL instead
   
-  // Rail colors
-  POWER_RAIL: '#DC2626',   // Red
-  GROUND_RAIL: '#2563EB',  // Blue
-  POWER_RAIL_BG: '#FEE2E2',
-  GROUND_RAIL_BG: '#DBEAFE',
+  // Rail stripe colors (thin lines like real breadboard)
+  POWER_RAIL: '#EF4444',            // Red stripe
+  GROUND_RAIL: '#3B82F6',           // Blue stripe
+  RAIL_STRIPE_WIDTH: 2,             // Thin stripe line
+  
+  // Legacy rail BG colors (kept for compatibility but will be replaced)
+  POWER_RAIL_BG: 'transparent',
+  GROUND_RAIL_BG: 'transparent',
   
   // Palette colors (used for wires, LEDs, and other colorable components)
   PALETTE_RED: '#DC2626',
@@ -100,13 +108,24 @@ export const COLORS = {
   SELECTION_HIGHLIGHT: '#3B82F6',
   DELETE_HIGHLIGHT: '#EF4444',
   
-  // Voltage potential indicator colors
-  POSITIVE_POTENTIAL: 'rgba(239, 68, 68, 0.6)',
-  NEGATIVE_POTENTIAL: 'rgba(59, 130, 246, 0.6)',
+  // Voltage potential indicator colors (glow effect for active voltage)
+  // These are the ONLY colors used for circuit activation visualization
+  POSITIVE_POTENTIAL: 'rgba(239, 68, 68, 0.7)',   // Red glow (positive voltage)
+  NEGATIVE_POTENTIAL: 'rgba(59, 130, 246, 0.7)',  // Blue glow (negative/ground)
   
-  // Board detail colors
-  CENTER_GAP: '#D4CFC0',
+  // Center trench colors - physical indentation appearance
+  CENTER_GAP: '#E5E7EB',            // Light grey trench base
+  CENTER_GAP_SHADOW: '#9CA3AF',     // Darker shadow for depth
+  CENTER_GAP_HIGHLIGHT: '#FFFFFF',  // Top highlight
+  
+  // Silkscreen text colors (printed labels)
+  SILKSCREEN_TEXT: '#374151',       // Dark grey printed text
+  SILKSCREEN_LABEL: '#6B7280',      // Slightly lighter for secondary text
 } as const;
+
+// ---- Engine Limits ----
+/** Maximum BFS iterations per flood-fill pass. Acts as a safeguard against infinite loops. */
+export const MAX_EVALUATION_STEPS = 5000;
 
 // ---- Color Palette Options (for wires, LEDs, and other components) ----
 export const COLOR_PALETTE = [
@@ -133,6 +152,7 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
     isLoad: false,
     isPolarized: true,
     isConductive: true,
+    isPowerSource: true, // CRITICAL: Seeds flood-fill algorithm
   },
   led: {
     type: 'led',
@@ -145,6 +165,7 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
     isLoad: true,
     isPolarized: true,
     isConductive: false,
+    isPowerSource: false,
   },
   resistor: {
     type: 'resistor',
@@ -157,6 +178,7 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
     isLoad: true,
     isPolarized: false,
     isConductive: false,
+    isPowerSource: false,
   },
   switch: {
     type: 'switch',
@@ -169,6 +191,7 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
     isLoad: false,
     isPolarized: false,
     isConductive: true,
+    isPowerSource: false,
   },
   capacitor: {
     type: 'capacitor',
@@ -181,6 +204,7 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
     isLoad: true,
     isPolarized: true,
     isConductive: false,
+    isPowerSource: false,
   },
   buzzer: {
     type: 'buzzer',
@@ -193,6 +217,7 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
     isLoad: true,
     isPolarized: true,
     isConductive: false,
+    isPowerSource: false,
   },
 } as const;
 

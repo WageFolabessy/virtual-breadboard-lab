@@ -75,7 +75,7 @@ export const Resistor: React.FC<ResistorProps> = React.memo(
           y1={0}
           x2={-bodyWidth / 2}
           y2={0}
-          stroke={isActive ? COLORS.NODE_ACTIVE : "#888"}
+          stroke={isActive ? COLORS.POWER_RAIL : "#888"}
           strokeWidth={2}
         />
         <line
@@ -83,7 +83,7 @@ export const Resistor: React.FC<ResistorProps> = React.memo(
           y1={0}
           x2={length / 2}
           y2={0}
-          stroke={isActive ? COLORS.NODE_ACTIVE : "#888"}
+          stroke={isActive ? COLORS.POWER_RAIL : "#888"}
           strokeWidth={2}
         />
 

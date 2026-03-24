@@ -72,7 +72,7 @@ export const Capacitor: React.FC<CapacitorProps> = React.memo(
           y1={0}
           x2={-plateGap / 2 - 2}
           y2={0}
-          stroke={isActive ? COLORS.NODE_ACTIVE : "#888"}
+          stroke={isActive ? COLORS.POWER_RAIL : "#888"}
           strokeWidth={2}
         />
 
@@ -82,7 +82,7 @@ export const Capacitor: React.FC<CapacitorProps> = React.memo(
           y1={0}
           x2={length / 2}
           y2={0}
-          stroke={isActive ? COLORS.NODE_ACTIVE : "#888"}
+          stroke={isActive ? COLORS.POWER_RAIL : "#888"}
           strokeWidth={2}
         />
 
@@ -92,7 +92,7 @@ export const Capacitor: React.FC<CapacitorProps> = React.memo(
           y1={-plateHeight / 2}
           x2={-plateGap / 2}
           y2={plateHeight / 2}
-          stroke={isActive ? COLORS.NODE_ACTIVE : "#333"}
+          stroke={isActive ? COLORS.POWER_RAIL : "#333"}
           strokeWidth={3}
         />
 
@@ -100,7 +100,7 @@ export const Capacitor: React.FC<CapacitorProps> = React.memo(
         <path
           d={`M ${plateGap / 2} ${-plateHeight / 2} Q ${plateGap / 2 + 3} 0 ${plateGap / 2} ${plateHeight / 2}`}
           fill="none"
-          stroke={isActive ? COLORS.NODE_ACTIVE : "#333"}
+          stroke={isActive ? COLORS.POWER_RAIL : "#333"}
           strokeWidth={3}
         />
 

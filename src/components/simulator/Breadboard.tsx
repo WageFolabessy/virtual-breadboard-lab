@@ -2,8 +2,15 @@
 
 // ============================================
 // BREADBOARD SVG COMPONENT
-// Renders the breadboard grid with interactive nodes
+// Renders a realistic MB-102 style breadboard with interactive nodes
 // ============================================
+//
+// VISUAL DESIGN:
+// - Off-white plastic body with 3D drop shadow
+// - Square holes with inset shadow effect (like real breadboard holes)
+// - Thin red/blue stripe lines for power rails
+// - Physical trench indentation in center
+// - Silkscreen-style printed labels
 //
 // PERFORMANCE OPTIMIZATIONS:
 // 1. Node components receive handlers as props (no internal useCircuitStore)
@@ -18,11 +25,15 @@ import { useCircuitStore } from "@/lib/store/circuit-store";
 import { BreadboardNode, ToolType } from "@/lib/types";
 import { BREADBOARD, RENDER, COLORS } from "@/lib/constants";
 
-// ---- Node Component ----
+// ---- Constants for hole appearance ----
+const HOLE_SIZE = 6; // Square hole size
+const HOLE_RADIUS = 1; // Slight corner rounding for realistic look
+const HOLE_HOVER_SIZE = 8; // Larger on hover
+
+// ---- Node Component (Square Hole with Inset Effect) ----
 // CRITICAL: No useCircuitStore inside this component - receives everything via props
 interface NodeProps {
   node: BreadboardNode;
-  isActive: boolean;
   isWireStart: boolean;
   isPlacementTarget: boolean;
   isPositive: boolean; // Node has positive voltage potential
@@ -34,7 +45,6 @@ interface NodeProps {
 const BreadboardNodeComponent: React.FC<NodeProps> = React.memo(
   ({
     node,
-    isActive,
     isWireStart,
     isPlacementTarget,
     isPositive,
@@ -42,8 +52,8 @@ const BreadboardNodeComponent: React.FC<NodeProps> = React.memo(
     selectedTool,
     onNodeClick,
   }) => {
-    // Use refs for hover state to avoid re-renders
-    const circleRef = useRef<SVGCircleElement>(null);
+    const rectRef = useRef<SVGRectElement>(null);
+    const glowRef = useRef<SVGRectElement>(null);
 
     const handleClick = useCallback(
       (e: React.MouseEvent) => {
@@ -53,91 +63,143 @@ const BreadboardNodeComponent: React.FC<NodeProps> = React.memo(
       [onNodeClick, node.id],
     );
 
-    // Determine fill color based on state priority
-    const getFillColor = useCallback((): string => {
+    // Determine base fill color based on state priority
+    // REMOVED: Green NODE_ACTIVE - now use only red/blue voltage glows
+    const getBaseFillColor = useCallback((): string => {
       if (node.isOccupied) return COLORS.NODE_OCCUPIED;
-      if (isActive) return COLORS.NODE_ACTIVE;
       if (isWireStart) return COLORS.SELECTION_HIGHLIGHT;
       if (isPlacementTarget) return COLORS.PALETTE_GREEN;
-      // Voltage potential indicators (only show when not occupied/selected)
+      return COLORS.NODE_EMPTY;
+    }, [node.isOccupied, isWireStart, isPlacementTarget]);
+
+    // Determine glow color for voltage potential (red=positive, blue=negative)
+    const getGlowColor = useCallback((): string | null => {
+      if (node.isOccupied || isWireStart || isPlacementTarget) {
+        return null; // No glow when in special states
+      }
       if (isPositive) return COLORS.POSITIVE_POTENTIAL;
       if (isNegative) return COLORS.NEGATIVE_POTENTIAL;
-      // Default rail colors
-      if (node.stripType === "power-rail") return COLORS.POWER_RAIL;
-      if (node.stripType === "ground-rail") return COLORS.GROUND_RAIL;
-      return COLORS.NODE_EMPTY;
-    }, [
-      node.isOccupied,
-      node.stripType,
-      isActive,
-      isWireStart,
-      isPlacementTarget,
-      isPositive,
-      isNegative,
-    ]);
+      return null;
+    }, [node.isOccupied, isWireStart, isPlacementTarget, isPositive, isNegative]);
 
     // Use native DOM for hover effects (no React re-render)
     const handleMouseEnter = useCallback(() => {
-      if (circleRef.current) {
-        circleRef.current.setAttribute("r", String(RENDER.NODE_HOVER_RADIUS));
-        circleRef.current.setAttribute("stroke", "#fff");
-        circleRef.current.setAttribute("stroke-width", "1.5");
+      if (rectRef.current) {
+        const newSize = HOLE_HOVER_SIZE;
+        const offset = (newSize - HOLE_SIZE) / 2;
+        rectRef.current.setAttribute("x", String(node.canvasPosition.x - HOLE_SIZE / 2 - offset));
+        rectRef.current.setAttribute("y", String(node.canvasPosition.y - HOLE_SIZE / 2 - offset));
+        rectRef.current.setAttribute("width", String(newSize));
+        rectRef.current.setAttribute("height", String(newSize));
+        rectRef.current.setAttribute("stroke", "#fff");
+        rectRef.current.setAttribute("stroke-width", "1");
+        
         // Update fill for hover if not in a special state
-        if (
-          !node.isOccupied &&
-          !isActive &&
-          !isWireStart &&
-          !isPlacementTarget &&
-          !isPositive &&
-          !isNegative
-        ) {
-          circleRef.current.setAttribute("fill", COLORS.NODE_HOVER);
+        if (!node.isOccupied && !isWireStart && !isPlacementTarget && !isPositive && !isNegative) {
+          rectRef.current.setAttribute("fill", COLORS.NODE_HOVER);
         }
       }
-    }, [
-      node.isOccupied,
-      isActive,
-      isWireStart,
-      isPlacementTarget,
-      isPositive,
-      isNegative,
-    ]);
+      if (glowRef.current) {
+        const newSize = HOLE_HOVER_SIZE + 4;
+        const offset = (newSize - HOLE_SIZE - 4) / 2;
+        glowRef.current.setAttribute("x", String(node.canvasPosition.x - HOLE_SIZE / 2 - 2 - offset));
+        glowRef.current.setAttribute("y", String(node.canvasPosition.y - HOLE_SIZE / 2 - 2 - offset));
+        glowRef.current.setAttribute("width", String(newSize));
+        glowRef.current.setAttribute("height", String(newSize));
+      }
+    }, [node.canvasPosition.x, node.canvasPosition.y, node.isOccupied, isWireStart, isPlacementTarget, isPositive, isNegative]);
 
     const handleMouseLeave = useCallback(() => {
-      if (circleRef.current) {
-        circleRef.current.setAttribute("r", String(RENDER.NODE_RADIUS));
-        circleRef.current.setAttribute("stroke", "none");
-        circleRef.current.setAttribute("stroke-width", "0");
-        // Restore original fill
-        circleRef.current.setAttribute("fill", getFillColor());
+      if (rectRef.current) {
+        rectRef.current.setAttribute("x", String(node.canvasPosition.x - HOLE_SIZE / 2));
+        rectRef.current.setAttribute("y", String(node.canvasPosition.y - HOLE_SIZE / 2));
+        rectRef.current.setAttribute("width", String(HOLE_SIZE));
+        rectRef.current.setAttribute("height", String(HOLE_SIZE));
+        rectRef.current.setAttribute("stroke", COLORS.NODE_INNER_SHADOW);
+        rectRef.current.setAttribute("stroke-width", "0.5");
+        rectRef.current.setAttribute("fill", getBaseFillColor());
       }
-    }, [getFillColor]);
+      if (glowRef.current) {
+        glowRef.current.setAttribute("x", String(node.canvasPosition.x - HOLE_SIZE / 2 - 2));
+        glowRef.current.setAttribute("y", String(node.canvasPosition.y - HOLE_SIZE / 2 - 2));
+        glowRef.current.setAttribute("width", String(HOLE_SIZE + 4));
+        glowRef.current.setAttribute("height", String(HOLE_SIZE + 4));
+      }
+    }, [node.canvasPosition.x, node.canvasPosition.y, getBaseFillColor]);
 
-    const fillColor = getFillColor();
-    const radius = isWireStart ? RENDER.NODE_HOVER_RADIUS : RENDER.NODE_RADIUS;
+    const baseFill = getBaseFillColor();
+    const glowColor = getGlowColor();
     const cursor = selectedTool === "select" ? "pointer" : "crosshair";
+    const size = isWireStart ? HOLE_HOVER_SIZE : HOLE_SIZE;
+    const halfSize = size / 2;
 
     return (
-      <circle
-        ref={circleRef}
-        cx={node.canvasPosition.x}
-        cy={node.canvasPosition.y}
-        r={radius}
-        fill={fillColor}
-        stroke={isWireStart ? "#fff" : "none"}
-        strokeWidth={isWireStart ? 1.5 : 0}
-        onClick={handleClick}
-        onMouseEnter={handleMouseEnter}
-        onMouseLeave={handleMouseLeave}
-        style={{ cursor, transition: "fill 0.1s ease" }}
-      />
+      <g>
+        {/* Glow effect for voltage potential (rendered behind the hole) */}
+        {glowColor && (
+          <rect
+            ref={glowRef}
+            x={node.canvasPosition.x - halfSize - 2}
+            y={node.canvasPosition.y - halfSize - 2}
+            width={size + 4}
+            height={size + 4}
+            rx={HOLE_RADIUS + 1}
+            ry={HOLE_RADIUS + 1}
+            fill={glowColor}
+            style={{ filter: "blur(2px)" }}
+          />
+        )}
+        
+        {/* Hole outer ring (slight bevel effect) */}
+        <rect
+          x={node.canvasPosition.x - halfSize - 0.5}
+          y={node.canvasPosition.y - halfSize - 0.5}
+          width={size + 1}
+          height={size + 1}
+          rx={HOLE_RADIUS + 0.5}
+          ry={HOLE_RADIUS + 0.5}
+          fill={COLORS.NODE_RING}
+        />
+        
+        {/* Main hole (square with inset shadow effect) */}
+        <rect
+          ref={rectRef}
+          x={node.canvasPosition.x - halfSize}
+          y={node.canvasPosition.y - halfSize}
+          width={size}
+          height={size}
+          rx={HOLE_RADIUS}
+          ry={HOLE_RADIUS}
+          fill={baseFill}
+          stroke={COLORS.NODE_INNER_SHADOW}
+          strokeWidth={0.5}
+          onClick={handleClick}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          style={{ 
+            cursor, 
+            transition: "fill 0.1s ease",
+          }}
+        />
+        
+        {/* Inner highlight (top-left light reflection) */}
+        <rect
+          x={node.canvasPosition.x - halfSize + 1}
+          y={node.canvasPosition.y - halfSize + 1}
+          width={2}
+          height={1}
+          rx={0.5}
+          fill="rgba(255, 255, 255, 0.1)"
+          style={{ pointerEvents: "none" }}
+        />
+      </g>
     );
   },
 );
 
 BreadboardNodeComponent.displayName = "BreadboardNodeComponent";
 
-// ---- Rail Label Component ----
+// ---- Rail Label Component (Silkscreen Style) ----
 interface RailLabelProps {
   x: number;
   y: number;
@@ -150,16 +212,18 @@ const RailLabel: React.FC<RailLabelProps> = ({ x, y, label, color }) => (
     x={x}
     y={y}
     fill={color}
-    fontSize="14"
-    fontWeight="bold"
+    fontSize="12"
+    fontWeight="600"
+    fontFamily="Arial, sans-serif"
     textAnchor="middle"
     dominantBaseline="middle"
+    style={{ userSelect: "none" }}
   >
     {label}
   </text>
 );
 
-// ---- Row Label Component ----
+// ---- Row Label Component (Silkscreen Printed) ----
 interface RowLabelProps {
   row: string;
   y: number;
@@ -167,45 +231,73 @@ interface RowLabelProps {
 
 const RowLabel: React.FC<RowLabelProps> = ({ row, y }) => (
   <text
-    x={RENDER.PADDING_X - 25}
+    x={RENDER.PADDING_X - 22}
     y={y}
-    fill="#666"
-    fontSize="12"
-    fontWeight="500"
+    fill={COLORS.SILKSCREEN_TEXT}
+    fontSize="10"
+    fontWeight="600"
+    fontFamily="Arial, sans-serif"
     textAnchor="middle"
     dominantBaseline="middle"
+    style={{ userSelect: "none" }}
   >
     {row}
   </text>
 );
 
-// ---- Column Number Component ----
+// ---- Column Number Component (Silkscreen Printed) ----
 interface ColNumberProps {
   col: number;
   x: number;
   y: number;
 }
 
-const ColNumber: React.FC<ColNumberProps> = ({ col, x, y }) => (
-  <text
-    x={x}
-    y={y}
-    fill="#888"
-    fontSize="9"
-    textAnchor="middle"
-    dominantBaseline="middle"
-  >
-    {col % 5 === 0 ? col : ""}
-  </text>
+const ColNumber: React.FC<ColNumberProps> = ({ col, x, y }) => {
+  // Show all column numbers for the 65-column professional breadboard
+  // Use smaller font to fit all numbers
+  return (
+    <text
+      x={x}
+      y={y}
+      fill={COLORS.SILKSCREEN_LABEL}
+      fontSize="6"
+      fontWeight="500"
+      fontFamily="Arial, sans-serif"
+      textAnchor="middle"
+      dominantBaseline="middle"
+      style={{ userSelect: "none" }}
+    >
+      {col}
+    </text>
+  );
+};
+
+// ---- Power Rail Stripe Component ----
+interface RailStripeProps {
+  startX: number;
+  y: number;
+  width: number;
+  color: string;
+}
+
+const RailStripe: React.FC<RailStripeProps> = ({ startX, y, width, color }) => (
+  <line
+    x1={startX}
+    y1={y}
+    x2={startX + width}
+    y2={y}
+    stroke={color}
+    strokeWidth={2}
+    strokeLinecap="round"
+  />
 );
 
 // ---- Main Breadboard Component ----
 export const Breadboard: React.FC = () => {
   // Use a single shallow-compared selector for all state to minimize subscriptions
-  // and prevent re-renders when references change but content is the same
+  // NOTE: activeNodes removed - we only use positiveNodes/negativeNodes for voltage visualization
   const {
     nodes,
-    activeNodes,
     positiveNodes,
     negativeNodes,
     wireStartNodeId,
@@ -214,7 +306,6 @@ export const Breadboard: React.FC = () => {
   } = useCircuitStore(
     useShallow((state) => ({
       nodes: state.nodes,
-      activeNodes: state.activeNodes,
       positiveNodes: state.positiveNodes,
       negativeNodes: state.negativeNodes,
       wireStartNodeId: state.wireStartNodeId,
@@ -223,7 +314,7 @@ export const Breadboard: React.FC = () => {
     })),
   );
 
-  // Stable callback reference for node clicks - uses getState() to avoid dependency cycles
+  // Stable callback reference for node clicks
   const onNodeClick = useCallback((nodeId: string) => {
     useCircuitStore.getState().handleNodeClick(nodeId);
   }, []);
@@ -260,7 +351,6 @@ export const Breadboard: React.FC = () => {
     ];
 
     allRows.forEach((row) => {
-      // Find a node in this row to get Y position
       const nodeInRow = terminalNodes.find((n) => n.id.startsWith(`${row}-`));
       if (nodeInRow) {
         labels.push({ row, y: nodeInRow.canvasPosition.y });
@@ -284,57 +374,63 @@ export const Breadboard: React.FC = () => {
     return labels;
   }, [nodes]);
 
-  // Calculate rail background rectangles
-  const railBackgrounds = useMemo(() => {
+  // Calculate rail stripe positions
+  const railStripes = useMemo(() => {
     const topPowerNode = nodes.get("power-top-1");
     const topGroundNode = nodes.get("ground-top-1");
     const bottomPowerNode = nodes.get("power-bottom-1");
     const bottomGroundNode = nodes.get("ground-bottom-1");
 
-    if (
-      !topPowerNode ||
-      !topGroundNode ||
-      !bottomPowerNode ||
-      !bottomGroundNode
-    ) {
+    if (!topPowerNode || !topGroundNode || !bottomPowerNode || !bottomGroundNode) {
       return [];
     }
 
-    const width = (BREADBOARD.COLUMNS - 1) * RENDER.NODE_SPACING + 20;
+    const stripeStartX = RENDER.PADDING_X - 8;
+    const stripeWidth = (BREADBOARD.COLUMNS - 1) * RENDER.NODE_SPACING + 16;
 
     return [
-      {
-        id: "top-power-bg",
-        x: RENDER.PADDING_X - 10,
-        y: topPowerNode.canvasPosition.y - 8,
-        width,
-        height: 16,
-        fill: COLORS.POWER_RAIL_BG,
-      },
-      {
-        id: "top-ground-bg",
-        x: RENDER.PADDING_X - 10,
-        y: topGroundNode.canvasPosition.y - 8,
-        width,
-        height: 16,
-        fill: COLORS.GROUND_RAIL_BG,
-      },
-      {
-        id: "bottom-power-bg",
-        x: RENDER.PADDING_X - 10,
-        y: bottomPowerNode.canvasPosition.y - 8,
-        width,
-        height: 16,
-        fill: COLORS.POWER_RAIL_BG,
-      },
-      {
-        id: "bottom-ground-bg",
-        x: RENDER.PADDING_X - 10,
-        y: bottomGroundNode.canvasPosition.y - 8,
-        width,
-        height: 16,
-        fill: COLORS.GROUND_RAIL_BG,
-      },
+      { id: "top-power-stripe", y: topPowerNode.canvasPosition.y - 10, color: COLORS.POWER_RAIL },
+      { id: "top-ground-stripe", y: topGroundNode.canvasPosition.y + 10, color: COLORS.GROUND_RAIL },
+      { id: "bottom-power-stripe", y: bottomPowerNode.canvasPosition.y - 10, color: COLORS.POWER_RAIL },
+      { id: "bottom-ground-stripe", y: bottomGroundNode.canvasPosition.y + 10, color: COLORS.GROUND_RAIL },
+    ].map((stripe) => ({ ...stripe, startX: stripeStartX, width: stripeWidth }));
+  }, [nodes]);
+
+  // Calculate center trench position
+  // The trench sits between row F (bottom of top section) and row E (top of bottom section)
+  const centerTrench = useMemo(() => {
+    // F is the last row of top section (row index 4 in array)
+    // E is the first row of bottom section (row index 5 in array)
+    const fNode = nodes.get("F-1"); // Bottom of top section
+    const eNode = nodes.get("E-1"); // Top of bottom section
+    
+    if (!fNode || !eNode) return null;
+    
+    // Trench starts just below row F and ends just above row E
+    const y = fNode.canvasPosition.y + RENDER.NODE_SPACING / 2 + 2;
+    const height = RENDER.SECTION_GAP - 4;
+    const x = RENDER.PADDING_X - 8;
+    const width = (BREADBOARD.COLUMNS - 1) * RENDER.NODE_SPACING + 16;
+    
+    return { x, y, width, height };
+  }, [nodes]);
+
+  // Rail label positions
+  const railLabelPositions = useMemo(() => {
+    const topPowerNode = nodes.get("power-top-1");
+    const topGroundNode = nodes.get("ground-top-1");
+    const bottomPowerNode = nodes.get("power-bottom-1");
+    const bottomGroundNode = nodes.get("ground-bottom-1");
+
+    if (!topPowerNode || !topGroundNode || !bottomPowerNode || !bottomGroundNode) {
+      return [];
+    }
+
+    return [
+      { label: "+", x: RENDER.PADDING_X - 32, y: topPowerNode.canvasPosition.y, color: COLORS.POWER_RAIL },
+      { label: "-", x: RENDER.PADDING_X - 32, y: topGroundNode.canvasPosition.y, color: COLORS.GROUND_RAIL },
+      { label: "+", x: RENDER.PADDING_X - 32, y: bottomPowerNode.canvasPosition.y, color: COLORS.POWER_RAIL },
+      { label: "-", x: RENDER.PADDING_X - 32, y: bottomGroundNode.canvasPosition.y, color: COLORS.GROUND_RAIL },
     ];
   }, [nodes]);
 
@@ -345,94 +441,138 @@ export const Breadboard: React.FC = () => {
       viewBox={`0 0 ${boardWidth} ${boardHeight}`}
       className="breadboard-svg"
     >
-      {/* Board background */}
+      {/* SVG Definitions for filters and gradients */}
+      <defs>
+        {/* Drop shadow filter for 3D plastic effect */}
+        <filter id="boardShadow" x="-10%" y="-10%" width="120%" height="120%">
+          <feDropShadow dx="2" dy="4" stdDeviation="4" floodColor={COLORS.BOARD_SHADOW} floodOpacity="0.3" />
+        </filter>
+        
+        {/* Inset shadow filter for trench */}
+        <filter id="trenchInset" x="-20%" y="-20%" width="140%" height="140%">
+          <feOffset dx="0" dy="1" />
+          <feGaussianBlur stdDeviation="1" result="shadow" />
+          <feComposite in="SourceGraphic" in2="shadow" operator="over" />
+        </filter>
+        
+        {/* Linear gradient for trench depth effect */}
+        <linearGradient id="trenchGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor={COLORS.CENTER_GAP_SHADOW} />
+          <stop offset="20%" stopColor={COLORS.CENTER_GAP} />
+          <stop offset="80%" stopColor={COLORS.CENTER_GAP} />
+          <stop offset="100%" stopColor={COLORS.CENTER_GAP_HIGHLIGHT} />
+        </linearGradient>
+      </defs>
+
+      {/* Board background with drop shadow (3D plastic slab) */}
       <rect
-        x={0}
-        y={0}
-        width={boardWidth}
-        height={boardHeight}
+        x={4}
+        y={4}
+        width={boardWidth - 8}
+        height={boardHeight - 8}
         fill={COLORS.BOARD_BACKGROUND}
-        rx={8}
-        ry={8}
+        rx={6}
+        ry={6}
+        filter="url(#boardShadow)"
       />
 
-      {/* Board border */}
+      {/* Board top bevel highlight */}
       <rect
-        x={2}
-        y={2}
-        width={boardWidth - 4}
-        height={boardHeight - 4}
+        x={4}
+        y={4}
+        width={boardWidth - 8}
+        height={boardHeight - 8}
         fill="none"
-        stroke={COLORS.BOARD_BORDER}
-        strokeWidth={2}
+        stroke="rgba(255, 255, 255, 0.6)"
+        strokeWidth={1}
         rx={6}
         ry={6}
       />
+      
+      {/* Board edge border */}
+      <rect
+        x={5}
+        y={5}
+        width={boardWidth - 10}
+        height={boardHeight - 10}
+        fill="none"
+        stroke={COLORS.BOARD_BORDER}
+        strokeWidth={1}
+        rx={5}
+        ry={5}
+      />
 
-      {/* Rail backgrounds */}
-      {railBackgrounds.map((bg) => (
-        <rect
-          key={bg.id}
-          x={bg.x}
-          y={bg.y}
-          width={bg.width}
-          height={bg.height}
-          fill={bg.fill}
-          rx={4}
-          ry={4}
+      {/* Power rail stripes (thin colored lines) */}
+      {railStripes.map((stripe) => (
+        <RailStripe
+          key={stripe.id}
+          startX={stripe.startX}
+          y={stripe.y}
+          width={stripe.width}
+          color={stripe.color}
         />
       ))}
 
-      {/* Center gap indicator */}
-      <rect
-        x={RENDER.PADDING_X - 10}
-        y={
-          (nodes.get("E-1")?.canvasPosition.y ?? 0) +
-          RENDER.NODE_SPACING / 2 +
-          2
-        }
-        width={(BREADBOARD.COLUMNS - 1) * RENDER.NODE_SPACING + 20}
-        height={RENDER.SECTION_GAP - 4}
-        fill={COLORS.CENTER_GAP}
-        rx={2}
-      />
-
-      {/* Rail labels */}
-      {railBackgrounds.length > 0 && (
-        <>
-          <RailLabel
-            x={RENDER.PADDING_X - 35}
-            y={railBackgrounds[0].y + 8}
-            label="+"
-            color={COLORS.POWER_RAIL}
+      {/* Center trench (physical indentation) */}
+      {centerTrench && (
+        <g>
+          {/* Trench shadow (top edge) */}
+          <rect
+            x={centerTrench.x}
+            y={centerTrench.y}
+            width={centerTrench.width}
+            height={2}
+            fill={COLORS.CENTER_GAP_SHADOW}
+            rx={1}
           />
-          <RailLabel
-            x={RENDER.PADDING_X - 35}
-            y={railBackgrounds[1].y + 8}
-            label="-"
-            color={COLORS.GROUND_RAIL}
+          
+          {/* Trench body with gradient */}
+          <rect
+            x={centerTrench.x}
+            y={centerTrench.y}
+            width={centerTrench.width}
+            height={centerTrench.height}
+            fill="url(#trenchGradient)"
+            rx={2}
           />
-          <RailLabel
-            x={RENDER.PADDING_X - 35}
-            y={railBackgrounds[2].y + 8}
-            label="+"
-            color={COLORS.POWER_RAIL}
+          
+          {/* Trench inner shadow lines for depth */}
+          <line
+            x1={centerTrench.x + 2}
+            y1={centerTrench.y + 2}
+            x2={centerTrench.x + centerTrench.width - 2}
+            y2={centerTrench.y + 2}
+            stroke={COLORS.CENTER_GAP_SHADOW}
+            strokeWidth={0.5}
           />
-          <RailLabel
-            x={RENDER.PADDING_X - 35}
-            y={railBackgrounds[3].y + 8}
-            label="-"
-            color={COLORS.GROUND_RAIL}
+          <line
+            x1={centerTrench.x + 2}
+            y1={centerTrench.y + centerTrench.height - 2}
+            x2={centerTrench.x + centerTrench.width - 2}
+            y2={centerTrench.y + centerTrench.height - 2}
+            stroke={COLORS.CENTER_GAP_HIGHLIGHT}
+            strokeWidth={0.5}
           />
-        </>
+        </g>
       )}
 
-      {/* Row labels */}
+      {/* Rail labels (silkscreen printed +/-) */}
+      {railLabelPositions.map((pos, idx) => (
+        <RailLabel
+          key={`rail-label-${idx}`}
+          x={pos.x}
+          y={pos.y}
+          label={pos.label}
+          color={pos.color}
+        />
+      ))}
+
+      {/* Row labels (A-J silkscreen) */}
       {rowLabels.map(({ row, y }) => (
         <RowLabel key={row} row={row} y={y} />
       ))}
 
-      {/* Column numbers */}
+      {/* Column numbers (1, 5, 10, 15... silkscreen) */}
       {colLabels.map(({ col, x }) => (
         <ColNumber
           key={col}
@@ -443,17 +583,16 @@ export const Breadboard: React.FC = () => {
             2 * RENDER.NODE_SPACING +
             RENDER.RAIL_GAP +
             RENDER.RAIL_TO_TERMINAL_GAP -
-            12
+            10
           }
         />
       ))}
 
-      {/* Rail nodes */}
+      {/* Rail nodes (power/ground holes) */}
       {railNodes.map((node) => (
         <BreadboardNodeComponent
           key={node.id}
           node={node}
-          isActive={activeNodes.has(node.id)}
           isWireStart={wireStartNodeId === node.id}
           isPlacementTarget={placementPins.includes(node.id)}
           isPositive={positiveNodes.has(node.id)}
@@ -463,12 +602,11 @@ export const Breadboard: React.FC = () => {
         />
       ))}
 
-      {/* Terminal nodes */}
+      {/* Terminal nodes (J-A holes, top-to-bottom) */}
       {terminalNodes.map((node) => (
         <BreadboardNodeComponent
           key={node.id}
           node={node}
-          isActive={activeNodes.has(node.id)}
           isWireStart={wireStartNodeId === node.id}
           isPlacementTarget={placementPins.includes(node.id)}
           isPositive={positiveNodes.has(node.id)}

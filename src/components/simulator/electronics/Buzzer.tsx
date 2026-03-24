@@ -171,13 +171,13 @@ export const Buzzer: React.FC<BuzzerProps> = React.memo(
           </>
         )}
 
-        {/* Leads */}
+        {/* Leads - use red/blue for active state instead of green */}
         <line
           x1={-radius - 2}
           y1={0}
           x2={-radius - 10}
           y2={0}
-          stroke={isActive ? COLORS.NODE_ACTIVE : "#888"}
+          stroke={isActive ? COLORS.POWER_RAIL : "#888"}
           strokeWidth={2}
         />
         <line
@@ -185,7 +185,7 @@ export const Buzzer: React.FC<BuzzerProps> = React.memo(
           y1={0}
           x2={radius + 10}
           y2={0}
-          stroke={isActive ? COLORS.NODE_ACTIVE : "#888"}
+          stroke={isActive ? COLORS.POWER_RAIL : "#888"}
           strokeWidth={2}
         />
 

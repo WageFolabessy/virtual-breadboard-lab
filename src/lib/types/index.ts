@@ -126,7 +126,6 @@ export interface CircuitState {
   selectedTool: ToolType;
   selectedComponentId: string | null;
   wireStartNodeId: string | null;
-  hoveredNodeId: string | null;
   
   // Simulation
   simulation: SimulationResult;
@@ -147,6 +146,8 @@ export interface ComponentDefinition {
   isPolarized: boolean;
   /** True if component passes current when active (wire, switch-closed, battery). */
   isConductive: boolean;
+  /** True if component is a power source (battery, power supply). Seeds flood-fill algorithm. */
+  isPowerSource: boolean;
 }
 
 // ---- Saved Circuit (for localStorage) ----

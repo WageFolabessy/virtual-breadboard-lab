@@ -186,7 +186,6 @@ interface CircuitStoreState {
   selectedTool: ToolType;
   selectedComponentId: string | null;
   wireStartNodeId: string | null;
-  hoveredNodeId: string | null;
   
   // Simulation results
   simulation: SimulationResult;
@@ -205,7 +204,6 @@ interface CircuitStoreActions {
   setSelectedTool: (tool: ToolType) => void;
   
   // Node interaction
-  setHoveredNode: (nodeId: string | null) => void;
   handleNodeClick: (nodeId: string) => void;
   
   // Wire actions
@@ -282,7 +280,6 @@ const initialState: CircuitStoreState = {
   selectedTool: 'select',
   selectedComponentId: null,
   wireStartNodeId: null,
-  hoveredNodeId: null,
   simulation: {
     status: 'incomplete',
     isCircuitComplete: false,
@@ -322,8 +319,6 @@ export const useCircuitStore = create<CircuitStore>()(
       },
       
       // ---- Node Interaction ----
-      setHoveredNode: (nodeId) => set({ hoveredNodeId: nodeId }),
-      
       handleNodeClick: (nodeId) => {
         const state = get();
         const node = state.nodes.get(nodeId);

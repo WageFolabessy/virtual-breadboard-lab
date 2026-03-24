@@ -86,7 +86,7 @@ export const Switch: React.FC<SwitchProps> = React.memo(
           cx={-length / 2 + 8}
           cy={0}
           r={4}
-          fill={isActive && isClosed ? COLORS.NODE_ACTIVE : "#666"}
+          fill={isActive && isClosed ? COLORS.POWER_RAIL : "#666"}
           stroke="#333"
           strokeWidth={1}
         />
@@ -96,7 +96,7 @@ export const Switch: React.FC<SwitchProps> = React.memo(
           cx={length / 2 - 8}
           cy={0}
           r={4}
-          fill={isActive && isClosed ? COLORS.NODE_ACTIVE : "#666"}
+          fill={isActive && isClosed ? COLORS.POWER_RAIL : "#666"}
           stroke="#333"
           strokeWidth={1}
         />
@@ -107,7 +107,7 @@ export const Switch: React.FC<SwitchProps> = React.memo(
           y1={0}
           x2={isClosed ? length / 2 - 8 : length / 2 - 16}
           y2={isClosed ? 0 : -8}
-          stroke={isClosed ? (isActive ? COLORS.NODE_ACTIVE : "#333") : "#666"}
+          stroke={isClosed ? (isActive ? COLORS.POWER_RAIL : "#333") : "#666"}
           strokeWidth={3}
           strokeLinecap="round"
           style={{ transition: "all 0.15s ease" }}
