@@ -36,6 +36,7 @@ import {
   Buzzer,
   Diode,
   Transistor,
+  Timer555,
 } from "./electronics";
 import { ComponentInfoPanel, WireInfoPanel } from "./panels";
 import { Header } from "@/components/Header";
@@ -298,6 +299,19 @@ export const Workspace: React.FC = () => {
                   ) {
                     return (
                       <Transistor
+                        key={component.id}
+                        component={component}
+                        nodes={nodes}
+                        isSelected={isSelected}
+                        isActive={isActive}
+                        onClick={() => selectComponent(component.id)}
+                      />
+                    );
+                  }
+
+                  if (component.type === "ic_555") {
+                    return (
+                      <Timer555
                         key={component.id}
                         component={component}
                         nodes={nodes}

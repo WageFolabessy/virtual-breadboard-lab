@@ -554,6 +554,95 @@ export const useCircuitStore = create<CircuitStore>()(
           return;
         }
         
+        // ---- DIP-8 AUTO-PLACEMENT (ICs like 555 Timer) ----
+        // DIP-8 must straddle the center trench (Row E ↔ Row F).
+        // Pins 1-4 on the clicked row, Pins 5-8 on the opposite row (reversed, standard U-shape).
+        if (definition.pinCount === 8) {
+          const rootRow = node.id.split('-')[0]; // e.g. "E" from "E-10"
+          const rootCol = node.position.col;
+          
+          // Enforce placement only on trench-edge rows (E or F)
+          const TRENCH_MAP: Record<string, string> = { 'E': 'F', 'F': 'E' };
+          const oppositeRow = TRENCH_MAP[rootRow];
+          if (!oppositeRow) {
+            // User clicked a non-trench row — reject silently
+            return;
+          }
+          
+          // DIP-8 U-shape pin mapping:
+          // Pins 1-4 (top side): rootRow at col, col+1, col+2, col+3
+          // Pins 5-8 (bottom side, reversed): oppositeRow at col+3, col+2, col+1, col
+          const pinNodeIds: string[] = [];
+          
+          // Top side: pins 1-4 (left to right)
+          for (let offset = 0; offset < 4; offset++) {
+            const targetId = `${rootRow}-${rootCol + offset}`;
+            const targetNode = state.nodes.get(targetId);
+            if (!targetNode || targetNode.isOccupied) return;
+            pinNodeIds.push(targetId);
+          }
+          
+          // Bottom side: pins 5-8 (right to left — standard DIP U-shape)
+          for (let offset = 3; offset >= 0; offset--) {
+            const targetId = `${oppositeRow}-${rootCol + offset}`;
+            const targetNode = state.nodes.get(targetId);
+            if (!targetNode || targetNode.isOccupied) return;
+            pinNodeIds.push(targetId);
+          }
+          
+          // All 8 nodes validated — place the IC
+          get().saveSnapshot();
+          const componentId = generateId();
+          const pins = createComponentPins(state.placementComponent, componentId);
+          
+          pins.forEach((pin, index) => {
+            pin.connectedNodeId = pinNodeIds[index];
+          });
+          
+          // Canvas position: center of the 8-pin footprint
+          const topLeft = state.nodes.get(pinNodeIds[0])!;
+          const topRight = state.nodes.get(pinNodeIds[3])!;
+          const bottomLeft = state.nodes.get(pinNodeIds[7])!;
+          const canvasPosition = {
+            x: (topLeft.canvasPosition.x + topRight.canvasPosition.x) / 2,
+            y: (topLeft.canvasPosition.y + bottomLeft.canvasPosition.y) / 2,
+          };
+          
+          const componentState = getDefaultComponentState(state.placementComponent);
+          
+          const newComponent: CircuitComponent = {
+            id: componentId,
+            type: state.placementComponent,
+            pins,
+            canvasPosition,
+            rotation: 0,
+            state: componentState,
+          };
+          
+          const updatedNodes = new Map(state.nodes);
+          pinNodeIds.forEach((pinNodeId) => {
+            const n = updatedNodes.get(pinNodeId);
+            if (n) {
+              updatedNodes.set(pinNodeId, {
+                ...n,
+                isOccupied: true,
+                occupiedBy: componentId,
+              });
+            }
+          });
+          
+          set({
+            components: [...state.components, newComponent],
+            nodes: updatedNodes,
+            placementComponent: null,
+            placementPins: [],
+            selectedTool: 'select',
+          });
+          
+          get().runSimulation();
+          return;
+        }
+        
         // ---- STANDARD 2-PIN PLACEMENT ----
         const newPins = [...state.placementPins, nodeId];
         

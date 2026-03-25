@@ -176,6 +176,28 @@ export const ComponentLibrary: React.FC = () => {
           })}
         </div>
 
+        {/* Integrated Circuits */}
+        <div className="space-y-2">
+          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            Integrated Circuits
+          </h3>
+          {(["ic_555"] as ComponentType[]).map((type) => {
+            const def = COMPONENT_DEFINITIONS[type];
+            if (!def) return null;
+            return (
+              <ComponentCard
+                key={type}
+                type={type}
+                name={def.name}
+                description={def.description}
+                icon={def.icon}
+                isSelected={selectedTool === type}
+                onClick={() => setSelectedTool(type)}
+              />
+            );
+          })}
+        </div>
+
         {/* Colors */}
         <div className="pt-4 border-t border-gray-200">
           <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">

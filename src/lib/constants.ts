@@ -258,6 +258,19 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
     isConductive: false,
     isPowerSource: false,
   },
+  ic_555: {
+    type: 'ic_555',
+    name: '555 Timer',
+    description: 'DIP-8 timer IC — straddles center trench',
+    pinCount: 8,
+    pinTypes: ['ic-gnd', 'ic-trig', 'ic-out', 'ic-rst', 'ic-ctrl', 'ic-thr', 'ic-dis', 'ic-vcc'],
+    defaultState: { isActive: false },
+    icon: '🔲',
+    isLoad: true,
+    isPolarized: true,
+    isConductive: false,
+    isPowerSource: false,
+  },
 } as const;
 
 // ---- Local Storage Keys ----

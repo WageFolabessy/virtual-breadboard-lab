@@ -31,8 +31,8 @@ export interface BreadboardNode {
 }
 
 // ---- Electronic Component Types ----
-export type ComponentType = 'battery' | 'led' | 'resistor' | 'wire' | 'switch' | 'capacitor' | 'buzzer' | 'diode' | 'npn_transistor' | 'pnp_transistor';
-export type PinType = 'positive' | 'negative' | 'anode' | 'cathode' | 'terminal-1' | 'terminal-2' | 'collector' | 'base' | 'emitter';
+export type ComponentType = 'battery' | 'led' | 'resistor' | 'wire' | 'switch' | 'capacitor' | 'buzzer' | 'diode' | 'npn_transistor' | 'pnp_transistor' | 'ic_555';
+export type PinType = 'positive' | 'negative' | 'anode' | 'cathode' | 'terminal-1' | 'terminal-2' | 'collector' | 'base' | 'emitter' | 'ic-gnd' | 'ic-trig' | 'ic-out' | 'ic-rst' | 'ic-ctrl' | 'ic-thr' | 'ic-dis' | 'ic-vcc';
 
 export interface ComponentPin {
   id: string;                      // Format: "{componentId}-{pinType}"
@@ -86,7 +86,11 @@ export interface TransistorState {
   type: 'npn' | 'pnp';
 }
 
-export type ComponentState = BatteryState | LEDState | ResistorState | SwitchState | CapacitorState | BuzzerState | DiodeState | TransistorState | Record<string, unknown>;
+export interface IC555State {
+  isActive: boolean;
+}
+
+export type ComponentState = BatteryState | LEDState | ResistorState | SwitchState | CapacitorState | BuzzerState | DiodeState | TransistorState | IC555State | Record<string, unknown>;
 
 // ---- Wire Types ----
 export interface Wire {
@@ -221,5 +225,10 @@ export function asDiodeState(state: ComponentState): DiodeState | null {
 
 export function asTransistorState(state: ComponentState): TransistorState | null {
   if (state && 'isOn' in state && 'type' in state) return state as TransistorState;
+  return null;
+}
+
+export function asIC555State(state: ComponentState): IC555State | null {
+  if (state && 'isActive' in state && !('frequency' in state) && !('isOn' in state)) return state as IC555State;
   return null;
 }

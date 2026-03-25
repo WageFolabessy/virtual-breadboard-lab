@@ -34,6 +34,7 @@ const COMPONENT_DISPLAY_NAMES: Record<string, string> = {
   diode: "Diode",
   npn_transistor: "NPN Transistor",
   pnp_transistor: "PNP Transistor",
+  ic_555: "555 Timer IC",
 };
 
 // Clean display names for pin types
@@ -47,6 +48,14 @@ const PIN_DISPLAY_NAMES: Record<string, string> = {
   collector: "Collector",
   base: "Base",
   emitter: "Emitter",
+  "ic-gnd": "GND (Pin 1)",
+  "ic-trig": "TRIG (Pin 2)",
+  "ic-out": "OUT (Pin 3)",
+  "ic-rst": "RST (Pin 4)",
+  "ic-ctrl": "CTRL (Pin 5)",
+  "ic-thr": "THR (Pin 6)",
+  "ic-dis": "DIS (Pin 7)",
+  "ic-vcc": "VCC (Pin 8)",
 };
 
 interface ComponentInfoPanelProps {
