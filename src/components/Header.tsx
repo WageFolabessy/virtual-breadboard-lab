@@ -64,7 +64,7 @@ export const Header: React.FC = () => {
           alt="Virtual Breadboard Lab Logo"
           width={70}
           height={70}
-          className="rounded-lg shadow-sm"
+          className="w-[70px] h-[70px] rounded-lg shadow-sm"
           priority
         />
         <div>
