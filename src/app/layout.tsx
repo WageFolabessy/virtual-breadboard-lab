@@ -13,13 +13,56 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Virtual Breadboard Lab",
+  metadataBase: new URL("https://vbl.cangkir.tech"),
+  title:
+    "Virtual Breadboard Lab - Free Online Circuit Simulator | Simulator Elektronika",
   description:
-    "A fast, interactive, and purely logic-based web application for safely designing and testing basic electronic circuits without physical components.",
+    "Free interactive breadboard simulator. Design, test, and learn electronic circuits, logic gates, and 555 Timer ICs directly in your browser. / Simulator elektronika online gratis dari Cangkir.",
+  keywords: [
+    "free online circuit simulator",
+    "virtual breadboard",
+    "logic gate simulator",
+    "555 timer simulator online",
+    "electronics learning tool",
+    "breadboard simulator",
+    "circuit simulator",
+    "simulator elektronika",
+    "belajar sirkuit",
+    "merakit sirkuit gratis",
+    "transistor NPN PNP",
+    "IC Timer 555",
+    "Cangkir",
+  ],
+  authors: [{ name: "Cangkir", url: "https://cangkir.tech" }],
+  creator: "Cangkir",
   openGraph: {
-    title: "Virtual Breadboard Lab",
+    type: "website",
+    locale: "en_US",
+    url: "https://vbl.cangkir.tech",
+    siteName: "Virtual Breadboard Lab",
+    title:
+      "Virtual Breadboard Lab - Free Online Circuit Simulator | Simulator Elektronika",
     description:
-      "A fast, interactive, and purely logic-based web application for safely designing and testing basic electronic circuits without physical components.",
+      "Free interactive breadboard simulator. Design, test, and learn electronic circuits, logic gates, and 555 Timer ICs directly in your browser. / Simulator elektronika online gratis dari Cangkir.",
+    images: [
+      {
+        url: "/icon.png",
+        width: 512,
+        height: 512,
+        alt: "Virtual Breadboard Lab Logo",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary",
+    title: "Virtual Breadboard Lab - Free Online Circuit Simulator",
+    description:
+      "Free interactive breadboard simulator. Design, test, and learn electronic circuits directly in your browser. / Simulator elektronika online gratis.",
+    images: ["/icon.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
   },
 };
 

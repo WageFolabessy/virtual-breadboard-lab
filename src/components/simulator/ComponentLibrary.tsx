@@ -14,7 +14,11 @@
 import React, { useMemo } from "react";
 import { useCircuitStore } from "@/lib/store/circuit-store";
 import { useShallow } from "zustand/react/shallow";
-import { ComponentType, ComponentCategory, CATEGORY_DISPLAY_NAMES } from "@/lib/types";
+import {
+  ComponentType,
+  ComponentCategory,
+  CATEGORY_DISPLAY_NAMES,
+} from "@/lib/types";
 import { COMPONENT_DEFINITIONS, COLOR_PALETTE } from "@/lib/constants";
 import { ColorSwatchButton, SectionHeader } from "@/components/ui";
 import { useCircuitActions } from "@/hooks/useCircuitActions";
@@ -49,7 +53,9 @@ const ComponentCard: React.FC<ComponentCardProps> = ({
       `}
     >
       <div className="flex items-center gap-3">
-        <span className="text-2xl">{icon}</span>
+        <span className="text-2xl" role="img" aria-label={name}>
+          {icon}
+        </span>
         <div className="flex-1 min-w-0">
           <h3 className="font-semibold text-gray-800 text-sm">{name}</h3>
           <p className="text-xs text-gray-500 truncate">{description}</p>
@@ -60,7 +66,13 @@ const ComponentCard: React.FC<ComponentCardProps> = ({
 };
 
 // ---- Category order for display ----
-const CATEGORY_ORDER: ComponentCategory[] = ['power', 'output', 'passive', 'control', 'ic'];
+const CATEGORY_ORDER: ComponentCategory[] = [
+  "power",
+  "output",
+  "passive",
+  "control",
+  "ic",
+];
 
 export const ComponentLibrary: React.FC = () => {
   const {
@@ -120,9 +132,7 @@ export const ComponentLibrary: React.FC = () => {
 
           return (
             <div key={category} className="space-y-2">
-              <SectionHeader>
-                {CATEGORY_DISPLAY_NAMES[category]}
-              </SectionHeader>
+              <SectionHeader>{CATEGORY_DISPLAY_NAMES[category]}</SectionHeader>
               {componentsInCategory.map((type) => {
                 const def = COMPONENT_DEFINITIONS[type];
                 if (!def) return null;
