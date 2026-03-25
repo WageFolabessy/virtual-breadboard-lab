@@ -516,23 +516,30 @@ export function evaluateCircuit(
   const initialPositiveSeeds = new Set(batteryPositive);
   const initialNegativeSeeds = new Set(batteryNegative);
   
-  // === TIMED COMPONENT OUTPUT INJECTION (UNCONDITIONAL) ===
+  // === TIMED COMPONENT OUTPUT INJECTION (PUSH-PULL) ===
   // Uses trait-driven check via isTimed instead of hardcoded type strings.
-  // If any timed IC has clockState=true, inject its OUT pin into the ISOLATED positive seed set.
+  // Real 555 output stage is a push-pull amplifier:
+  //   clockState === true  → OUT sources current (positive seed)
+  //   clockState === false → OUT sinks current (negative seed), only if IC is powered
   // Power gating (VCC/GND check) is handled by tick() — here we just inject the signal.
   for (const comp of components) {
     const compDef = getDefinition(comp.type);
     if (!compDef.isTimed) continue;
     
     const state = comp.state as Record<string, unknown>;
-    if (!state.clockState) continue;
-    
     const outPin = comp.pins.find(p => p.pinType === 'ic-out');
     if (!outPin?.connectedNodeId) continue;
     
-    // Inject OUT pin into the ISOLATED seed set (not batteryPositive!)
     const outGroup = connectionCache.get(outPin.connectedNodeId) || [outPin.connectedNodeId];
-    outGroup.forEach(n => initialPositiveSeeds.add(n));
+    
+    if (state.clockState === true) {
+      // HIGH: OUT pin sources current → inject into positive seeds
+      outGroup.forEach(n => initialPositiveSeeds.add(n));
+    } else if (state.clockState === false) {
+      // LOW: OUT pin sinks current → inject into negative seeds
+      // Power gating is handled upstream by tick() — only toggles clockState when VCC/GND connected
+      outGroup.forEach(n => initialNegativeSeeds.add(n));
+    }
   }
   
   // === STEP 1: Check for SHORT CIRCUIT (wire-only path from + to -) ===
