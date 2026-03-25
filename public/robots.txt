@@ -1,3 +1,18 @@
+# Virtual Breadboard Lab - Robots.txt
+# Optimized for global crawling (Google, Bing, Baidu, Yandex)
+
 User-agent: *
 Allow: /
-Sitemap: https://vbl.cangkir.tech/sitemap.xml
+
+# Sitemap location
+Sitemap: https://vbl.eproject.tech/sitemap.xml
+
+# Block common crawl waste (if you add these paths later)
+Disallow: /api/
+Disallow: /_next/static/
+Disallow: /*.json$
+
+# Allow search engines to crawl all educational content
+Allow: /tutorials/
+Allow: /docs/
+Allow: /faq/

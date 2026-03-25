@@ -43,7 +43,7 @@ export const Footer: React.FC = () => {
       <div className="px-4 py-1.5 text-center text-xs text-gray-500">
         &copy; {new Date().getFullYear()} Virtual Breadboard Lab. Powered by{" "}
         <a
-          href="https://cangkir.tech"
+          href="https://eproject.tech"
           target="_blank"
           rel="noopener noreferrer"
           className="font-bold text-black hover:underline transition-colors"
