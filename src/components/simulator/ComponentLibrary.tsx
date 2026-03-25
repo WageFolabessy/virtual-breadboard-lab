@@ -32,6 +32,7 @@ const ComponentCard: React.FC<ComponentCardProps> = ({
   return (
     <button
       onClick={onClick}
+      title={`${name} — ${description}`}
       className={`
         w-full p-3 rounded-lg border-2 transition-all duration-200 text-left cursor-pointer
         ${

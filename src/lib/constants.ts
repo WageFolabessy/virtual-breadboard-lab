@@ -143,8 +143,8 @@ export const COLOR_PALETTE = [
 export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
   battery: {
     type: 'battery',
-    name: 'Battery (5V)',
-    description: 'DC power source providing 5V',
+    name: 'Battery',
+    description: 'DC power source',
     pinCount: 2,
     pinTypes: ['positive', 'negative'],
     defaultState: { voltage: 5, isOn: true },
@@ -169,7 +169,7 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
   },
   resistor: {
     type: 'resistor',
-    name: '220Ω Resistor',
+    name: 'Resistor',
     description: 'Current limiting resistor',
     pinCount: 2,
     pinTypes: ['terminal-1', 'terminal-2'],
@@ -195,7 +195,7 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
   },
   capacitor: {
     type: 'capacitor',
-    name: '10µF Capacitor',
+    name: 'Capacitor',
     description: 'Electrolytic capacitor — stores charge',
     pinCount: 2,
     pinTypes: ['positive', 'negative'],
