@@ -4,13 +4,19 @@
 // COMPONENT LIBRARY SIDEBAR
 // Sidebar with draggable electronic components
 // ============================================
+//
+// AGENTS.md COMPLIANCE:
+// - Categories are generated DYNAMICALLY from COMPONENT_DEFINITIONS
+// - No hardcoded component type arrays
+// - Uses trait-driven grouping via 'category' property
+// ============================================
 
-import React from "react";
+import React, { useMemo } from "react";
 import { useCircuitStore } from "@/lib/store/circuit-store";
 import { useShallow } from "zustand/react/shallow";
-import { ComponentType } from "@/lib/types";
+import { ComponentType, ComponentCategory, CATEGORY_DISPLAY_NAMES } from "@/lib/types";
 import { COMPONENT_DEFINITIONS, COLOR_PALETTE } from "@/lib/constants";
-import { ColorSwatchButton } from "@/components/ui";
+import { ColorSwatchButton, SectionHeader } from "@/components/ui";
 import { useCircuitActions } from "@/hooks/useCircuitActions";
 
 interface ComponentCardProps {
@@ -53,6 +59,9 @@ const ComponentCard: React.FC<ComponentCardProps> = ({
   );
 };
 
+// ---- Category order for display ----
+const CATEGORY_ORDER: ComponentCategory[] = ['power', 'output', 'passive', 'control', 'ic'];
+
 export const ComponentLibrary: React.FC = () => {
   const {
     selectedTool,
@@ -74,6 +83,25 @@ export const ComponentLibrary: React.FC = () => {
 
   const { cancelComponentPlacement } = useCircuitActions();
 
+  // ---- TRAIT-DRIVEN: Group components by category from COMPONENT_DEFINITIONS ----
+  const componentsByCategory = useMemo(() => {
+    const groups: Record<ComponentCategory, ComponentType[]> = {
+      power: [],
+      output: [],
+      passive: [],
+      control: [],
+      ic: [],
+    };
+
+    Object.values(COMPONENT_DEFINITIONS).forEach((def) => {
+      if (def.category && def.category in groups) {
+        groups[def.category].push(def.type);
+      }
+    });
+
+    return groups;
+  }, []);
+
   return (
     <div className="w-full lg:w-64 bg-gray-50 border-b lg:border-b-0 lg:border-r border-gray-200 flex flex-col max-h-48 lg:max-h-full lg:h-full overflow-hidden">
       {/* Header */}
@@ -84,125 +112,39 @@ export const ComponentLibrary: React.FC = () => {
         </p>
       </div>
 
-      {/* Component List — Grouped by Category */}
+      {/* Component List — Dynamically grouped by category */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {/* Power Sources */}
-        <div className="space-y-2">
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-            Power
-          </h3>
-          {(["battery"] as ComponentType[]).map((type) => {
-            const def = COMPONENT_DEFINITIONS[type];
-            if (!def) return null;
-            return (
-              <ComponentCard
-                key={type}
-                type={type}
-                name={def.name}
-                description={def.description}
-                icon={def.icon}
-                isSelected={selectedTool === type}
-                onClick={() => setSelectedTool(type)}
-              />
-            );
-          })}
-        </div>
+        {CATEGORY_ORDER.map((category) => {
+          const componentsInCategory = componentsByCategory[category];
+          if (componentsInCategory.length === 0) return null;
 
-        {/* Output Components */}
-        <div className="space-y-2">
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-            Output
-          </h3>
-          {(["led", "buzzer", "diode"] as ComponentType[]).map((type) => {
-            const def = COMPONENT_DEFINITIONS[type];
-            if (!def) return null;
-            return (
-              <ComponentCard
-                key={type}
-                type={type}
-                name={def.name}
-                description={def.description}
-                icon={def.icon}
-                isSelected={selectedTool === type}
-                onClick={() => setSelectedTool(type)}
-              />
-            );
-          })}
-        </div>
-
-        {/* Passive Components */}
-        <div className="space-y-2">
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-            Passive
-          </h3>
-          {(["resistor", "capacitor"] as ComponentType[]).map((type) => {
-            const def = COMPONENT_DEFINITIONS[type];
-            if (!def) return null;
-            return (
-              <ComponentCard
-                key={type}
-                type={type}
-                name={def.name}
-                description={def.description}
-                icon={def.icon}
-                isSelected={selectedTool === type}
-                onClick={() => setSelectedTool(type)}
-              />
-            );
-          })}
-        </div>
-
-        {/* Control */}
-        <div className="space-y-2">
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-            Control
-          </h3>
-          {(
-            ["switch", "npn_transistor", "pnp_transistor"] as ComponentType[]
-          ).map((type) => {
-            const def = COMPONENT_DEFINITIONS[type];
-            if (!def) return null;
-            return (
-              <ComponentCard
-                key={type}
-                type={type}
-                name={def.name}
-                description={def.description}
-                icon={def.icon}
-                isSelected={selectedTool === type}
-                onClick={() => setSelectedTool(type)}
-              />
-            );
-          })}
-        </div>
-
-        {/* Integrated Circuits */}
-        <div className="space-y-2">
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-            Integrated Circuits
-          </h3>
-          {(["ic_555"] as ComponentType[]).map((type) => {
-            const def = COMPONENT_DEFINITIONS[type];
-            if (!def) return null;
-            return (
-              <ComponentCard
-                key={type}
-                type={type}
-                name={def.name}
-                description={def.description}
-                icon={def.icon}
-                isSelected={selectedTool === type}
-                onClick={() => setSelectedTool(type)}
-              />
-            );
-          })}
-        </div>
+          return (
+            <div key={category} className="space-y-2">
+              <SectionHeader>
+                {CATEGORY_DISPLAY_NAMES[category]}
+              </SectionHeader>
+              {componentsInCategory.map((type) => {
+                const def = COMPONENT_DEFINITIONS[type];
+                if (!def) return null;
+                return (
+                  <ComponentCard
+                    key={type}
+                    type={type}
+                    name={def.name}
+                    description={def.description}
+                    icon={def.icon}
+                    isSelected={selectedTool === type}
+                    onClick={() => setSelectedTool(type)}
+                  />
+                );
+              })}
+            </div>
+          );
+        })}
 
         {/* Colors */}
         <div className="pt-4 border-t border-gray-200">
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-            Color
-          </h3>
+          <SectionHeader className="mb-3">Color</SectionHeader>
           <div className="flex flex-wrap gap-2">
             {COLOR_PALETTE.map((option) => (
               <ColorSwatchButton

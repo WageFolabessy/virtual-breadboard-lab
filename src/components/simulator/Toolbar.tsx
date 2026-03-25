@@ -10,7 +10,7 @@ import { useCircuitStore } from "@/lib/store/circuit-store";
 import { useShallow } from "zustand/react/shallow";
 import { ToolType } from "@/lib/types";
 import { SHORTCUTS } from "@/lib/constants";
-import { StatusBadge } from "@/components/ui";
+import { StatusBadge, ActionButton } from "@/components/ui";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 
 interface ToolButtonProps {
@@ -52,38 +52,6 @@ const ToolButton: React.FC<ToolButtonProps> = ({
       >
         {shortcut.toUpperCase()}
       </kbd>
-    </button>
-  );
-};
-
-interface ActionButtonProps {
-  icon: React.ReactNode;
-  label: string;
-  onClick: () => void;
-  variant?: "default" | "danger";
-}
-
-const ActionButton: React.FC<ActionButtonProps> = ({
-  icon,
-  label,
-  onClick,
-  variant = "default",
-}) => {
-  return (
-    <button
-      onClick={onClick}
-      title={label}
-      className={`
-        flex items-center gap-2 px-3 py-2 rounded-lg transition-all duration-150 cursor-pointer
-        ${
-          variant === "danger"
-            ? "bg-red-50 text-red-600 hover:bg-red-100 hover:scale-[1.02] border border-red-200"
-            : "bg-white text-gray-700 hover:bg-gray-100 hover:scale-[1.02] border border-gray-200"
-        }
-      `}
-    >
-      {icon}
-      <span className="text-sm font-medium">{label}</span>
     </button>
   );
 };

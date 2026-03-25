@@ -140,6 +140,8 @@ export const COLOR_PALETTE = [
 ] as const;
 
 // ---- Component Definitions ----
+// TRAIT-DRIVEN: Each component is defined by universal traits (isLoad, isPolarized, etc.)
+// The circuit evaluator uses these traits exclusively - NEVER hardcoded type checks.
 export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
   battery: {
     type: 'battery',
@@ -153,6 +155,7 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
     isPolarized: true,
     isConductive: true,
     isPowerSource: true, // CRITICAL: Seeds flood-fill algorithm
+    category: 'power',
   },
   led: {
     type: 'led',
@@ -166,6 +169,8 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
     isPolarized: true,
     isConductive: false,
     isPowerSource: false,
+    category: 'output',
+    hasUserColor: true, // Accepts user-selected color during placement
   },
   resistor: {
     type: 'resistor',
@@ -179,6 +184,7 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
     isPolarized: false,
     isConductive: false,
     isPowerSource: false,
+    category: 'passive',
   },
   switch: {
     type: 'switch',
@@ -192,6 +198,8 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
     isPolarized: false,
     isConductive: true,
     isPowerSource: false,
+    category: 'control',
+    isToggleable: true, // Can be toggled on/off by user
   },
   capacitor: {
     type: 'capacitor',
@@ -205,6 +213,7 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
     isPolarized: true,
     isConductive: false,
     isPowerSource: false,
+    category: 'passive',
   },
   buzzer: {
     type: 'buzzer',
@@ -218,6 +227,7 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
     isPolarized: true,
     isConductive: false,
     isPowerSource: false,
+    category: 'output',
   },
   diode: {
     type: 'diode',
@@ -231,6 +241,7 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
     isPolarized: true,
     isConductive: false,
     isPowerSource: false,
+    category: 'output',
   },
   npn_transistor: {
     type: 'npn_transistor',
@@ -244,6 +255,8 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
     isPolarized: true,
     isConductive: false,
     isPowerSource: false,
+    category: 'control',
+    transistorType: 'npn', // Trait-driven transistor logic
   },
   pnp_transistor: {
     type: 'pnp_transistor',
@@ -257,19 +270,23 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
     isPolarized: true,
     isConductive: false,
     isPowerSource: false,
+    category: 'control',
+    transistorType: 'pnp', // Trait-driven transistor logic
   },
   ic_555: {
     type: 'ic_555',
     name: '555 Timer',
     description: 'DIP-8 timer IC — straddles center trench',
     pinCount: 8,
-    pinTypes: ['ic-gnd', 'ic-trig', 'ic-out', 'ic-rst', 'ic-ctrl', 'ic-thr', 'ic-dis', 'ic-vcc'],
+    pinTypes: ['ic-gnd', 'ic-trig', 'ic-out', 'ic-thr', 'ic-ctrl', 'ic-rst', 'ic-dis', 'ic-vcc'],
     defaultState: { isActive: false, clockState: false },
     icon: '🔲',
     isLoad: true,
     isPolarized: true,
     isConductive: false,
     isPowerSource: false,
+    category: 'ic',
+    isTimed: true, // Requires periodic tick updates
   },
 } as const;
 

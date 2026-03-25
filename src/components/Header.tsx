@@ -2,6 +2,12 @@
 
 import React, { useRef } from "react";
 import { useCircuitStore } from "@/lib/store/circuit-store";
+import { ActionButton } from "@/components/ui";
+
+// ---- Icons for Header Actions ----
+const ExportIcon = () => <span className="text-base">📤</span>;
+const ImportIcon = () => <span className="text-base">📥</span>;
+const ClearIcon = () => <span className="text-base">🗑️</span>;
 
 export const Header: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -56,33 +62,28 @@ export const Header: React.FC = () => {
         </p>
       </div>
 
-      {/* Action Buttons */}
+      {/* Action Buttons - Using extracted ActionButton component */}
       <div className="flex items-center gap-2">
-        <button
+        <ActionButton
+          icon={<ExportIcon />}
+          label="Export"
           onClick={exportCircuit}
           title="Export circuit as JSON file (Ctrl+S)"
-          className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
-        >
-          <span className="text-base">📤</span>
-          Export
-        </button>
-        <button
+        />
+        <ActionButton
+          icon={<ImportIcon />}
+          label="Import"
           onClick={handleImportClick}
           title="Import circuit from JSON file"
-          className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
-        >
-          <span className="text-base">📥</span>
-          Import
-        </button>
+        />
         <div className="w-px h-6 bg-gray-300 mx-1" />
-        <button
+        <ActionButton
+          icon={<ClearIcon />}
+          label="Clear All"
           onClick={handleClearAll}
+          variant="danger"
           title="Clear all components and wires"
-          className="px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5"
-        >
-          <span className="text-base">🗑️</span>
-          Clear All
-        </button>
+        />
 
         {/* Hidden file input for import */}
         <input

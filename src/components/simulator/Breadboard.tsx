@@ -17,6 +17,7 @@
 // 2. Hover state uses native DOM manipulation (no React re-render)
 // 3. Parent component passes stable callbacks
 // 4. Uses useShallow for Set/Map selectors to avoid reference-change re-renders
+// 5. Color/hover logic extracted to useBreadboardNode hook (AGENTS.md compliance)
 // ============================================
 
 import React, { useMemo, useCallback, useRef } from "react";
@@ -24,6 +25,7 @@ import { useShallow } from "zustand/react/shallow";
 import { useCircuitStore } from "@/lib/store/circuit-store";
 import { BreadboardNode, ToolType } from "@/lib/types";
 import { BREADBOARD, RENDER, COLORS } from "@/lib/constants";
+import { useBreadboardNode } from "@/hooks/useBreadboardNode";
 
 // ---- Constants for hole appearance ----
 const HOLE_SIZE = 6; // Square hole size
@@ -63,117 +65,18 @@ const BreadboardNodeComponent: React.FC<NodeProps> = React.memo(
       [onNodeClick, node.id],
     );
 
-    // Determine base fill color based on state priority
-    // REMOVED: Green NODE_ACTIVE - now use only red/blue voltage glows
-    const getBaseFillColor = useCallback((): string => {
-      if (node.isOccupied) return COLORS.NODE_OCCUPIED;
-      if (isWireStart) return COLORS.SELECTION_HIGHLIGHT;
-      if (isPlacementTarget) return COLORS.PALETTE_GREEN;
-      return COLORS.NODE_EMPTY;
-    }, [node.isOccupied, isWireStart, isPlacementTarget]);
+    // ---- AGENTS.md Compliance: Logic extracted to useBreadboardNode hook ----
+    const { baseFill, glowColor, handleMouseEnter, handleMouseLeave } =
+      useBreadboardNode({
+        node,
+        isWireStart,
+        isPlacementTarget,
+        isPositive,
+        isNegative,
+        rectRef,
+        glowRef,
+      });
 
-    // Determine glow color for voltage potential (red=positive, blue=negative)
-    const getGlowColor = useCallback((): string | null => {
-      if (node.isOccupied || isWireStart || isPlacementTarget) {
-        return null; // No glow when in special states
-      }
-      if (isPositive && isNegative) return "rgba(168, 85, 247, 0.7)"; // Purple blend (both potentials)
-      if (isPositive) return COLORS.POSITIVE_POTENTIAL;
-      if (isNegative) return COLORS.NEGATIVE_POTENTIAL;
-      return null;
-    }, [
-      node.isOccupied,
-      isWireStart,
-      isPlacementTarget,
-      isPositive,
-      isNegative,
-    ]);
-
-    // Use native DOM for hover effects (no React re-render)
-    const handleMouseEnter = useCallback(() => {
-      if (rectRef.current) {
-        const newSize = HOLE_HOVER_SIZE;
-        const offset = (newSize - HOLE_SIZE) / 2;
-        rectRef.current.setAttribute(
-          "x",
-          String(node.canvasPosition.x - HOLE_SIZE / 2 - offset),
-        );
-        rectRef.current.setAttribute(
-          "y",
-          String(node.canvasPosition.y - HOLE_SIZE / 2 - offset),
-        );
-        rectRef.current.setAttribute("width", String(newSize));
-        rectRef.current.setAttribute("height", String(newSize));
-        rectRef.current.setAttribute("stroke", "#fff");
-        rectRef.current.setAttribute("stroke-width", "1");
-
-        // Update fill for hover if not in a special state
-        if (
-          !node.isOccupied &&
-          !isWireStart &&
-          !isPlacementTarget &&
-          !isPositive &&
-          !isNegative
-        ) {
-          rectRef.current.setAttribute("fill", COLORS.NODE_HOVER);
-        }
-      }
-      if (glowRef.current) {
-        const newSize = HOLE_HOVER_SIZE + 4;
-        const offset = (newSize - HOLE_SIZE - 4) / 2;
-        glowRef.current.setAttribute(
-          "x",
-          String(node.canvasPosition.x - HOLE_SIZE / 2 - 2 - offset),
-        );
-        glowRef.current.setAttribute(
-          "y",
-          String(node.canvasPosition.y - HOLE_SIZE / 2 - 2 - offset),
-        );
-        glowRef.current.setAttribute("width", String(newSize));
-        glowRef.current.setAttribute("height", String(newSize));
-      }
-    }, [
-      node.canvasPosition.x,
-      node.canvasPosition.y,
-      node.isOccupied,
-      isWireStart,
-      isPlacementTarget,
-      isPositive,
-      isNegative,
-    ]);
-
-    const handleMouseLeave = useCallback(() => {
-      if (rectRef.current) {
-        rectRef.current.setAttribute(
-          "x",
-          String(node.canvasPosition.x - HOLE_SIZE / 2),
-        );
-        rectRef.current.setAttribute(
-          "y",
-          String(node.canvasPosition.y - HOLE_SIZE / 2),
-        );
-        rectRef.current.setAttribute("width", String(HOLE_SIZE));
-        rectRef.current.setAttribute("height", String(HOLE_SIZE));
-        rectRef.current.setAttribute("stroke", COLORS.NODE_INNER_SHADOW);
-        rectRef.current.setAttribute("stroke-width", "0.5");
-        rectRef.current.setAttribute("fill", getBaseFillColor());
-      }
-      if (glowRef.current) {
-        glowRef.current.setAttribute(
-          "x",
-          String(node.canvasPosition.x - HOLE_SIZE / 2 - 2),
-        );
-        glowRef.current.setAttribute(
-          "y",
-          String(node.canvasPosition.y - HOLE_SIZE / 2 - 2),
-        );
-        glowRef.current.setAttribute("width", String(HOLE_SIZE + 4));
-        glowRef.current.setAttribute("height", String(HOLE_SIZE + 4));
-      }
-    }, [node.canvasPosition.x, node.canvasPosition.y, getBaseFillColor]);
-
-    const baseFill = getBaseFillColor();
-    const glowColor = getGlowColor();
     const cursor = selectedTool === "select" ? "pointer" : "crosshair";
     const size = isWireStart ? HOLE_HOVER_SIZE : HOLE_SIZE;
     const halfSize = size / 2;

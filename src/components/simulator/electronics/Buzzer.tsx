@@ -4,12 +4,17 @@
 // BUZZER SVG COMPONENT
 // Piezo buzzer that makes sound when active
 // Dynamic leads stretch from body edge to pin positions
+// 
+// AGENTS.md Compliance:
+// - Visual rendering ONLY (dumb component)
+// - Audio logic extracted to useBuzzerSound hook
 // ============================================
 
-import React, { useEffect, useRef } from "react";
+import React from "react";
 import { asBuzzerState } from "@/lib/types";
 import { COLORS } from "@/lib/constants";
 import { areComponentPropsEqual, BaseComponentProps } from "./componentMemo";
+import { useBuzzerSound } from "@/hooks/useBuzzerSound";
 
 interface BuzzerProps extends BaseComponentProps {
   isActive: boolean;
@@ -19,61 +24,8 @@ export const Buzzer: React.FC<BuzzerProps> = React.memo(
   ({ component, nodes, isSelected, isActive, onClick }) => {
     const state = asBuzzerState(component.state);
 
-    const audioContextRef = useRef<AudioContext | null>(null);
-    const oscillatorRef = useRef<OscillatorNode | null>(null);
-    const gainNodeRef = useRef<GainNode | null>(null);
-
-    // Sound effect when active
-    useEffect(() => {
-      if (isActive && state) {
-        // Create audio context on first activation
-        if (!audioContextRef.current) {
-          audioContextRef.current = new (
-            window.AudioContext ||
-            (window as unknown as { webkitAudioContext: typeof AudioContext })
-              .webkitAudioContext
-          )();
-        }
-
-        const ctx = audioContextRef.current;
-
-        // Create oscillator
-        const oscillator = ctx.createOscillator();
-        const gainNode = ctx.createGain();
-
-        oscillator.type = "square";
-        oscillator.frequency.setValueAtTime(state.frequency, ctx.currentTime);
-        gainNode.gain.setValueAtTime(0.1, ctx.currentTime); // Low volume
-
-        oscillator.connect(gainNode);
-        gainNode.connect(ctx.destination);
-        oscillator.start();
-
-        oscillatorRef.current = oscillator;
-        gainNodeRef.current = gainNode;
-      } else {
-        // Stop sound
-        if (oscillatorRef.current) {
-          oscillatorRef.current.stop();
-          oscillatorRef.current.disconnect();
-          oscillatorRef.current = null;
-        }
-        if (gainNodeRef.current) {
-          gainNodeRef.current.disconnect();
-          gainNodeRef.current = null;
-        }
-      }
-
-      return () => {
-        if (oscillatorRef.current) {
-          oscillatorRef.current.stop();
-          oscillatorRef.current.disconnect();
-        }
-        if (gainNodeRef.current) {
-          gainNodeRef.current.disconnect();
-        }
-      };
-    }, [isActive, state]);
+    // Delegate audio logic to hook (AGENTS.md: "Brains are Hooks")
+    useBuzzerSound(isActive, state?.frequency ?? 440);
 
     if (!state) return null;
 

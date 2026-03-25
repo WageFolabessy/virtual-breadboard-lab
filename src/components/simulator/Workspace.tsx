@@ -11,6 +11,7 @@
 // 3. Memoized selectors prevent cascade re-renders
 // 4. All logic extracted into dedicated hooks — this component is pure rendering
 // 5. Info panels extracted to separate "dumb" components
+// 6. Component rendering uses registry pattern (no hardcoded type checks)
 // ============================================
 
 import React, { useSyncExternalStore, useMemo } from "react";
@@ -20,24 +21,14 @@ import {
   subscribeToWireDrawing,
 } from "@/lib/store/circuit-store";
 import { useShallow } from "zustand/react/shallow";
-import { asLEDState, asSwitchState, asBuzzerState } from "@/lib/types";
 import { StatusIndicator } from "@/components/ui/StatusIndicator";
 import { KbdShortcut } from "@/components/ui/KbdShortcut";
+import { FloatingPanel, IconButton } from "@/components/ui";
 import { Breadboard } from "./Breadboard";
 import { Toolbar } from "./Toolbar";
 import { ComponentLibrary } from "./ComponentLibrary";
 import { Wire, WirePreview } from "./Wire";
-import {
-  Battery,
-  LED,
-  Resistor,
-  Switch,
-  Capacitor,
-  Buzzer,
-  Diode,
-  Transistor,
-  Timer555,
-} from "./electronics";
+import { renderComponent } from "./ComponentRegistry";
 import { ComponentInfoPanel, WireInfoPanel } from "./panels";
 import { Header } from "@/components/Header";
 import { useHydration } from "@/hooks/useHydration";
@@ -185,146 +176,22 @@ export const Workspace: React.FC = () => {
             >
               <Breadboard />
 
-              {/* Layer 2: Components (rendered first = visually behind wires) */}
+              {/* Layer 2: Components (rendered via registry - no hardcoded type checks) */}
               <g className="components-layer">
                 {components.map((component) => {
                   const isSelected = selectedComponentId === component.id;
                   const isActive = isComponentActive(component.id);
+                  const simulationState = simulation.componentStates.get(component.id);
 
-                  if (component.type === "battery") {
-                    return (
-                      <Battery
-                        key={component.id}
-                        component={component}
-                        nodes={nodes}
-                        isSelected={isSelected}
-                        onClick={() => selectComponent(component.id)}
-                      />
-                    );
-                  }
-
-                  if (component.type === "led") {
-                    const simState = simulation.componentStates.get(
-                      component.id,
-                    );
-                    const ledState = simState ? asLEDState(simState) : null;
-
-                    return (
-                      <LED
-                        key={component.id}
-                        component={component}
-                        nodes={nodes}
-                        isSelected={isSelected}
-                        isLit={ledState?.isLit ?? false}
-                        onClick={() => selectComponent(component.id)}
-                      />
-                    );
-                  }
-
-                  if (component.type === "resistor") {
-                    return (
-                      <Resistor
-                        key={component.id}
-                        component={component}
-                        nodes={nodes}
-                        isSelected={isSelected}
-                        isActive={isActive}
-                        onClick={() => selectComponent(component.id)}
-                      />
-                    );
-                  }
-
-                  if (component.type === "switch") {
-                    const switchState = asSwitchState(component.state);
-                    return (
-                      <Switch
-                        key={component.id}
-                        component={component}
-                        nodes={nodes}
-                        isSelected={isSelected}
-                        isActive={isActive && (switchState?.isClosed ?? false)}
-                        onToggle={() => toggleSwitch(component.id)}
-                        onClick={() => selectComponent(component.id)}
-                      />
-                    );
-                  }
-
-                  if (component.type === "capacitor") {
-                    return (
-                      <Capacitor
-                        key={component.id}
-                        component={component}
-                        nodes={nodes}
-                        isSelected={isSelected}
-                        isActive={isActive}
-                        onClick={() => selectComponent(component.id)}
-                      />
-                    );
-                  }
-
-                  if (component.type === "buzzer") {
-                    const simState = simulation.componentStates.get(
-                      component.id,
-                    );
-                    const buzzerState = simState
-                      ? asBuzzerState(simState)
-                      : null;
-
-                    return (
-                      <Buzzer
-                        key={component.id}
-                        component={component}
-                        nodes={nodes}
-                        isSelected={isSelected}
-                        isActive={buzzerState?.isActive ?? false}
-                        onClick={() => selectComponent(component.id)}
-                      />
-                    );
-                  }
-
-                  if (component.type === "diode") {
-                    return (
-                      <Diode
-                        key={component.id}
-                        component={component}
-                        nodes={nodes}
-                        isSelected={isSelected}
-                        isActive={isActive}
-                        onClick={() => selectComponent(component.id)}
-                      />
-                    );
-                  }
-
-                  if (
-                    component.type === "npn_transistor" ||
-                    component.type === "pnp_transistor"
-                  ) {
-                    return (
-                      <Transistor
-                        key={component.id}
-                        component={component}
-                        nodes={nodes}
-                        isSelected={isSelected}
-                        isActive={isActive}
-                        onClick={() => selectComponent(component.id)}
-                      />
-                    );
-                  }
-
-                  if (component.type === "ic_555") {
-                    return (
-                      <Timer555
-                        key={component.id}
-                        component={component}
-                        nodes={nodes}
-                        isSelected={isSelected}
-                        isActive={isActive}
-                        onClick={() => selectComponent(component.id)}
-                      />
-                    );
-                  }
-
-                  return null;
+                  return renderComponent({
+                    component,
+                    nodes,
+                    isSelected,
+                    isActive,
+                    simulationState,
+                    onSelect: () => selectComponent(component.id),
+                    onToggle: () => toggleSwitch(component.id),
+                  });
                 })}
               </g>
 
@@ -356,24 +223,16 @@ export const Workspace: React.FC = () => {
           </svg>
 
           {/* Zoom Controls — floating panel bottom-right */}
-          <div className="absolute bottom-4 right-4 flex items-center gap-1 bg-white/90 backdrop-blur-sm border border-gray-300 rounded-lg shadow-lg px-2 py-1.5 select-none">
-            <button
-              onClick={panZoomActions.zoomOut}
-              className="w-10 h-10 flex items-center justify-center rounded-md hover:bg-gray-100 active:bg-gray-200 text-gray-700 font-bold text-lg transition-colors cursor-pointer"
-              title="Zoom Out"
-            >
+          <FloatingPanel position="bottom-right">
+            <IconButton onClick={panZoomActions.zoomOut} title="Zoom Out">
               −
-            </button>
+            </IconButton>
             <span className="w-14 text-center text-xs font-mono text-gray-600 tabular-nums">
               {Math.round(panZoomState.scale * 100)}%
             </span>
-            <button
-              onClick={panZoomActions.zoomIn}
-              className="w-10 h-10 flex items-center justify-center rounded-md hover:bg-gray-100 active:bg-gray-200 text-gray-700 font-bold text-lg transition-colors cursor-pointer"
-              title="Zoom In"
-            >
+            <IconButton onClick={panZoomActions.zoomIn} title="Zoom In">
               +
-            </button>
+            </IconButton>
             <div className="w-px h-5 bg-gray-300 mx-1" />
             <button
               onClick={panZoomActions.resetView}
@@ -382,10 +241,10 @@ export const Workspace: React.FC = () => {
             >
               Reset
             </button>
-          </div>
+          </FloatingPanel>
 
           {/* Canvas Info Bar — bottom-left */}
-          <div className="absolute bottom-4 left-4 flex items-center gap-4 bg-white/90 backdrop-blur-sm border border-gray-300 rounded-lg shadow-lg px-3 py-1.5 text-xs text-gray-500">
+          <FloatingPanel position="bottom-left" className="gap-4 px-3">
             <span>Components: {components.length}</span>
             <span>Wires: {wires.length}</span>
             <div className="w-px h-4 bg-gray-300" />
@@ -395,7 +254,7 @@ export const Workspace: React.FC = () => {
             <KbdShortcut shortcut="ESC" label="Cancel" />
             <div className="w-px h-4 bg-gray-300" />
             <span className="text-gray-400">Scroll: Zoom | Ctrl+Drag: Pan</span>
-          </div>
+          </FloatingPanel>
         </div>
 
         {/* Right Panel - Info/Properties - Hidden on mobile, shown on desktop */}

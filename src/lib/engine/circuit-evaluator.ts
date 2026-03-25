@@ -46,6 +46,11 @@ const FALLBACK_DEFINITION: ComponentDefinition = {
   isPolarized: false,
   isConductive: true, // Safe default: allows current through
   isPowerSource: false, // Unknown components are not power sources
+  category: 'passive', // Safe default: treat as passive component
+  isToggleable: false,
+  isTimed: false,
+  transistorType: null,
+  hasUserColor: false,
 };
 
 function getDefinition(type: string): ComponentDefinition {
@@ -223,7 +228,8 @@ function componentConducts(
   // ---- TRANSISTOR CONDUCTIVITY (Dynamic Switching) ----
   // Transistors have isConductive=false in their definition, but can
   // conduct DYNAMICALLY when their base pin is at the correct voltage.
-  if (component.type === 'npn_transistor' || component.type === 'pnp_transistor') {
+  // Uses trait-driven check via transistorType instead of hardcoded type strings.
+  if (def.transistorType) {
     // Without voltage context (first pass), transistors don't conduct
     if (!positiveReachable || !negativeReachable) return false;
     
@@ -232,7 +238,7 @@ function componentConducts(
     
     const baseGroup = cache.get(basePin.connectedNodeId) || [basePin.connectedNodeId];
     
-    if (component.type === 'npn_transistor') {
+    if (def.transistorType === 'npn') {
       // NPN: Base must be POSITIVE → Collector-to-Emitter conducts
       return baseGroup.some(n => positiveReachable.has(n));
     } else {
@@ -510,13 +516,16 @@ export function evaluateCircuit(
   const initialPositiveSeeds = new Set(batteryPositive);
   const initialNegativeSeeds = new Set(batteryNegative);
   
-  // === 555 TIMER OUTPUT INJECTION (UNCONDITIONAL) ===
-  // If any 555 IC has clockState=true, inject its OUT pin into the ISOLATED positive seed set.
+  // === TIMED COMPONENT OUTPUT INJECTION (UNCONDITIONAL) ===
+  // Uses trait-driven check via isTimed instead of hardcoded type strings.
+  // If any timed IC has clockState=true, inject its OUT pin into the ISOLATED positive seed set.
   // Power gating (VCC/GND check) is handled by tick() — here we just inject the signal.
   for (const comp of components) {
-    if (comp.type !== 'ic_555') continue;
-    const state555 = comp.state as Record<string, unknown>;
-    if (!state555.clockState) continue;
+    const compDef = getDefinition(comp.type);
+    if (!compDef.isTimed) continue;
+    
+    const state = comp.state as Record<string, unknown>;
+    if (!state.clockState) continue;
     
     const outPin = comp.pins.find(p => p.pinType === 'ic-out');
     if (!outPin?.connectedNodeId) continue;

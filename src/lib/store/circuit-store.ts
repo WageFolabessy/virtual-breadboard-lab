@@ -343,6 +343,10 @@ export const useCircuitStore = create<CircuitStore>()(
         
         if (!node) return;
         
+        // TRAIT-DRIVEN: Check if selectedTool is a component type from COMPONENT_DEFINITIONS
+        // This eliminates the need for hardcoded type lists
+        const isComponentTool = state.selectedTool in COMPONENT_DEFINITIONS;
+        
         switch (state.selectedTool) {
           case 'wire':
             if (state.wireStartNodeId === null) {
@@ -369,26 +373,25 @@ export const useCircuitStore = create<CircuitStore>()(
             }
             break;
             
-          case 'battery':
-          case 'led':
-          case 'resistor':
-          case 'switch':
-          case 'capacitor':
-          case 'buzzer':
-          case 'diode':
-          case 'npn_transistor':
-          case 'pnp_transistor':
-          case 'ic_555':
-            state.placeComponentPin(nodeId);
-            break;
-            
           case 'select':
-          default:
             // Select component at this node
             const component = state.components.find((c) =>
               c.pins.some((p) => p.connectedNodeId === nodeId)
             );
             state.selectComponent(component?.id ?? null);
+            break;
+            
+          default:
+            // TRAIT-DRIVEN: Any component type from COMPONENT_DEFINITIONS triggers placement
+            if (isComponentTool) {
+              state.placeComponentPin(nodeId);
+            } else {
+              // Unknown tool - fallback to select behavior
+              const fallbackComponent = state.components.find((c) =>
+                c.pins.some((p) => p.connectedNodeId === nodeId)
+              );
+              state.selectComponent(fallbackComponent?.id ?? null);
+            }
             break;
         }
       },
@@ -678,9 +681,12 @@ export const useCircuitStore = create<CircuitStore>()(
             y: (firstNode.canvasPosition.y + lastNode.canvasPosition.y) / 2,
           };
           
-          // Get default component state, inject selectedColor for LED
+          // Get default component state
           let componentState = getDefaultComponentState(state.placementComponent);
-          if (state.placementComponent === 'led') {
+          
+          // TRAIT-DRIVEN: Inject selectedColor for components with hasUserColor trait
+          const compDef = COMPONENT_DEFINITIONS[state.placementComponent];
+          if (compDef?.hasUserColor) {
             componentState = { ...componentState, color: state.selectedColor } as LEDState;
           }
           
@@ -772,7 +778,9 @@ export const useCircuitStore = create<CircuitStore>()(
         const state = get();
         const component = state.components.find((c) => c.id === componentId);
         
-        if (!component || component.type !== 'switch') return;
+        // TRAIT-DRIVEN: Check isToggleable trait instead of hardcoded type
+        const compDef = component ? COMPONENT_DEFINITIONS[component.type] : null;
+        if (!component || !compDef?.isToggleable) return;
         
         get().saveSnapshot();
         
@@ -848,11 +856,12 @@ export const useCircuitStore = create<CircuitStore>()(
           return false;
         };
         
-        // Find all 555 ICs and toggle their clock if powered
+        // TRAIT-DRIVEN: Find all timed components and toggle their clock if powered
         const updatedComponents = state.components.map(comp => {
-          if (comp.type !== 'ic_555') return comp;
+          const compDef = COMPONENT_DEFINITIONS[comp.type];
+          if (!compDef?.isTimed) return comp;
           
-          // Check if this 555 is powered using last simulation results
+          // Check if this timed component is powered using last simulation results
           const vccPin = comp.pins.find(p => p.pinType === 'ic-vcc');
           const gndPin = comp.pins.find(p => p.pinType === 'ic-gnd');
           if (!vccPin?.connectedNodeId || !gndPin?.connectedNodeId) return comp;
@@ -861,7 +870,7 @@ export const useCircuitStore = create<CircuitStore>()(
           const gndPowered = pinReaches(gndPin.connectedNodeId, state.negativeNodes);
           
           if (vccPowered && gndPowered) {
-            // 555 is powered — toggle clock output
+            // Timed component is powered — toggle clock output
             const currentState = comp.state as Record<string, unknown>;
             const newClockState = !currentState.clockState;
             anyChanged = true;

@@ -145,6 +145,21 @@ export interface CircuitState {
   simulation: SimulationResult;
 }
 
+// ---- Component Categories (for library grouping) ----
+export type ComponentCategory = 'power' | 'output' | 'passive' | 'control' | 'ic';
+
+// ---- Category Display Names ----
+export const CATEGORY_DISPLAY_NAMES: Record<ComponentCategory, string> = {
+  power: 'Power',
+  output: 'Output',
+  passive: 'Passive',
+  control: 'Control',
+  ic: 'Integrated Circuits',
+};
+
+// ---- Transistor Type (for trait-driven transistor logic) ----
+export type TransistorVariant = 'npn' | 'pnp' | null;
+
 // ---- Component Definition (for library/palette) ----
 export interface ComponentDefinition {
   type: ComponentType;
@@ -162,6 +177,16 @@ export interface ComponentDefinition {
   isConductive: boolean;
   /** True if component is a power source (battery, power supply). Seeds flood-fill algorithm. */
   isPowerSource: boolean;
+  /** Category for grouping in component library UI. */
+  category: ComponentCategory;
+  /** True if component can be toggled on/off by user click (switch). */
+  isToggleable?: boolean;
+  /** True if component requires periodic tick updates (555 timer). */
+  isTimed?: boolean;
+  /** Transistor variant for trait-driven transistor logic. Only set for transistors. */
+  transistorType?: TransistorVariant;
+  /** True if component accepts user-selected color during placement (LED). */
+  hasUserColor?: boolean;
 }
 
 // ---- Saved Circuit (for localStorage) ----

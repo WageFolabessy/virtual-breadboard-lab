@@ -8,6 +8,8 @@
 // AGENTS.md COMPLIANCE:
 // - This is a "dumb" UI component - receives all data via props
 // - No direct store access - uses callbacks from parent
+// - TRAIT-DRIVEN: Uses COMPONENT_DEFINITIONS for display names and state rendering
+// - Uses extracted UI components (InfoPanel, PropertyRow, DeleteButton)
 // - Reusable and testable in isolation
 // ============================================
 
@@ -22,22 +24,11 @@ import {
   asCapacitorState,
   asBuzzerState,
 } from "@/lib/types";
+import { COMPONENT_DEFINITIONS } from "@/lib/constants";
+import { InfoPanel, PropertyRow, DeleteButton, PanelButton } from "@/components/ui";
 
-// Clean display names for component types
-const COMPONENT_DISPLAY_NAMES: Record<string, string> = {
-  battery: "Battery",
-  led: "LED",
-  resistor: "Resistor",
-  switch: "Switch",
-  capacitor: "Capacitor",
-  buzzer: "Buzzer",
-  diode: "Diode",
-  npn_transistor: "NPN Transistor",
-  pnp_transistor: "PNP Transistor",
-  ic_555: "555 Timer IC",
-};
-
-// Clean display names for pin types
+// ---- Pin Display Names (derived from pin types) ----
+// This could be moved to COMPONENT_DEFINITIONS if needed
 const PIN_DISPLAY_NAMES: Record<string, string> = {
   positive: "Positive",
   negative: "Negative",
@@ -71,170 +62,172 @@ export const ComponentInfoPanel: React.FC<ComponentInfoPanelProps> = ({
   onToggleSwitch,
   onDelete,
 }) => {
-  const typeName = COMPONENT_DISPLAY_NAMES[component.type] || component.type;
+  // TRAIT-DRIVEN: Get display name from COMPONENT_DEFINITIONS
+  const def = COMPONENT_DEFINITIONS[component.type];
+  const typeName = def?.name || component.type;
 
   return (
-    <div className="bg-white rounded-lg p-4 border border-gray-200 mb-4">
-      <h3 className="text-sm font-semibold text-gray-600 mb-3">
-        Selected {typeName}
-      </h3>
+    <InfoPanel title={`Selected ${typeName}`}>
       <div className="space-y-2 text-sm">
         {/* Pin Connections */}
         {component.pins.map((pin, index) => (
-          <p key={pin.id || index}>
-            <span className="text-gray-500">
-              {PIN_DISPLAY_NAMES[pin.pinType] || pin.pinType}:
-            </span>{" "}
-            <span className="font-mono text-xs text-gray-700">
-              {pin.connectedNodeId || "Unconnected"}
-            </span>
-          </p>
+          <PropertyRow
+            key={pin.id || index}
+            label={PIN_DISPLAY_NAMES[pin.pinType] || pin.pinType}
+            value={pin.connectedNodeId || "Unconnected"}
+          />
         ))}
 
         {/* Component ID */}
-        <p>
-          <span className="text-gray-500">ID:</span>{" "}
-          <span className="font-mono text-xs text-gray-700">
-            {component.id.slice(0, 8)}...
-          </span>
-        </p>
+        <PropertyRow label="ID" value={`${component.id.slice(0, 8)}...`} />
 
-        {/* Component-specific state info */}
-        <ComponentStateInfo
+        {/* TRAIT-DRIVEN: Component-specific state info */}
+        <TraitDrivenStateInfo
           component={component}
           simulation={simulation}
           onToggleSwitch={onToggleSwitch}
         />
 
         {/* Delete button */}
-        <button
+        <DeleteButton
           onClick={() => onDelete(component.id)}
-          className="mt-2 w-full px-3 py-2.5 bg-red-50 text-red-600 text-sm rounded hover:bg-red-100 transition-colors cursor-pointer"
-        >
-          Delete {typeName}
-        </button>
+          label={`Delete ${typeName}`}
+        />
       </div>
-    </div>
+    </InfoPanel>
   );
 };
 
-// ---- Component State Info (Trait-Driven) ----
-interface ComponentStateInfoProps {
+// ============================================
+// TRAIT-DRIVEN STATE INFO COMPONENT
+// Renders state information based on component traits from COMPONENT_DEFINITIONS
+// ============================================
+
+interface TraitDrivenStateInfoProps {
   component: CircuitComponent;
   simulation: SimulationResult;
   onToggleSwitch: (componentId: string) => void;
 }
 
-const ComponentStateInfo: React.FC<ComponentStateInfoProps> = ({
+const TraitDrivenStateInfo: React.FC<TraitDrivenStateInfoProps> = ({
   component,
   simulation,
   onToggleSwitch,
 }) => {
-  switch (component.type) {
-    case "battery": {
-      const state = asBatteryState(component.state);
-      return state ? (
-        <p>
-          <span className="text-gray-500">Voltage:</span>{" "}
-          <span className="text-gray-900 font-medium">{state.voltage}V</span>
-        </p>
-      ) : null;
-    }
+  const def = COMPONENT_DEFINITIONS[component.type];
+  if (!def) return null;
 
-    case "led": {
-      const simState = simulation.componentStates.get(component.id);
-      const ledState = simState ? asLEDState(simState) : null;
-      return (
-        <p>
-          <span className="text-gray-500">State:</span>{" "}
-          <span
-            className={`font-medium ${
-              ledState?.isLit ? "text-green-600" : "text-gray-400"
-            }`}
-          >
-            {ledState?.isLit ? "ON" : "OFF"}
-          </span>
-        </p>
+  const componentState = component.state as Record<string, unknown>;
+  const simState = simulation.componentStates.get(component.id);
+  const stateItems: React.ReactNode[] = [];
+
+  // ---- TRAIT: isPowerSource → Show voltage ----
+  if (def.isPowerSource) {
+    const batteryState = asBatteryState(component.state);
+    if (batteryState) {
+      stateItems.push(
+        <StateRow key="voltage" label="Voltage" value={`${batteryState.voltage}V`} />
       );
     }
-
-    case "switch": {
-      const switchState = asSwitchState(component.state);
-      return (
-        <>
-          <p>
-            <span className="text-gray-500">State:</span>{" "}
-            <span
-              className={`font-medium ${
-                switchState?.isClosed ? "text-green-600" : "text-gray-400"
-              }`}
-            >
-              {switchState?.isClosed ? "CLOSED" : "OPEN"}
-            </span>
-          </p>
-          <button
-            onClick={() => onToggleSwitch(component.id)}
-            className="mt-2 w-full px-3 py-2.5 bg-blue-50 text-blue-600 text-sm rounded hover:bg-blue-100 transition-colors cursor-pointer"
-          >
-            Toggle Switch
-          </button>
-        </>
-      );
-    }
-
-    case "resistor": {
-      const state = asResistorState(component.state);
-      return state ? (
-        <p>
-          <span className="text-gray-500">Resistance:</span>{" "}
-          <span className="text-gray-900 font-medium">{state.resistance}Ω</span>
-        </p>
-      ) : null;
-    }
-
-    case "capacitor": {
-      const state = asCapacitorState(component.state);
-      return state ? (
-        <p>
-          <span className="text-gray-500">Capacitance:</span>{" "}
-          <span className="text-gray-900 font-medium">
-            {state.capacitance}µF
-          </span>
-        </p>
-      ) : null;
-    }
-
-    case "buzzer": {
-      const buzzerComponentState = asBuzzerState(component.state);
-      const simState = simulation.componentStates.get(component.id);
-      const buzzerState = simState ? asBuzzerState(simState) : null;
-      return (
-        <>
-          {buzzerComponentState && (
-            <p>
-              <span className="text-gray-500">Frequency:</span>{" "}
-              <span className="text-gray-900 font-medium">
-                {buzzerComponentState.frequency} Hz
-              </span>
-            </p>
-          )}
-          <p>
-            <span className="text-gray-500">State:</span>{" "}
-            <span
-              className={`font-medium ${
-                buzzerState?.isActive ? "text-yellow-600" : "text-gray-400"
-              }`}
-            >
-              {buzzerState?.isActive ? "BUZZING" : "SILENT"}
-            </span>
-          </p>
-        </>
-      );
-    }
-
-    default:
-      return null;
   }
+
+  // ---- TRAIT: isLoad → Show active state from simulation ----
+  if (def.isLoad && simState) {
+    // Check for LED-specific state (isLit)
+    const ledState = asLEDState(simState);
+    if (ledState) {
+      stateItems.push(
+        <StateRow
+          key="led-state"
+          label="State"
+          value={ledState.isLit ? "ON" : "OFF"}
+          valueClass={ledState.isLit ? "text-green-600" : "text-gray-400"}
+        />
+      );
+    }
+
+    // Check for Buzzer-specific state (isActive)
+    const buzzerState = asBuzzerState(simState);
+    if (buzzerState) {
+      stateItems.push(
+        <StateRow
+          key="buzzer-state"
+          label="State"
+          value={buzzerState.isActive ? "BUZZING" : "SILENT"}
+          valueClass={buzzerState.isActive ? "text-yellow-600" : "text-gray-400"}
+        />
+      );
+    }
+  }
+
+  // ---- STATE: resistance → Show resistance value ----
+  if ('resistance' in componentState) {
+    const resistorState = asResistorState(component.state);
+    if (resistorState) {
+      stateItems.push(
+        <StateRow key="resistance" label="Resistance" value={`${resistorState.resistance}Ω`} />
+      );
+    }
+  }
+
+  // ---- STATE: capacitance → Show capacitance value ----
+  if ('capacitance' in componentState) {
+    const capacitorState = asCapacitorState(component.state);
+    if (capacitorState) {
+      stateItems.push(
+        <StateRow key="capacitance" label="Capacitance" value={`${capacitorState.capacitance}µF`} />
+      );
+    }
+  }
+
+  // ---- STATE: frequency (buzzer) → Show frequency value ----
+  if ('frequency' in componentState) {
+    const buzzerComponentState = asBuzzerState(component.state);
+    if (buzzerComponentState) {
+      stateItems.push(
+        <StateRow key="frequency" label="Frequency" value={`${buzzerComponentState.frequency} Hz`} />
+      );
+    }
+  }
+
+  // ---- TRAIT: isToggleable → Show switch state + toggle button ----
+  if (def.isToggleable && 'isClosed' in componentState) {
+    const switchState = asSwitchState(component.state);
+    if (switchState) {
+      stateItems.push(
+        <StateRow
+          key="switch-state"
+          label="State"
+          value={switchState.isClosed ? "CLOSED" : "OPEN"}
+          valueClass={switchState.isClosed ? "text-green-600" : "text-gray-400"}
+        />
+      );
+      stateItems.push(
+        <PanelButton
+          key="toggle-switch"
+          onClick={() => onToggleSwitch(component.id)}
+          label="Toggle Switch"
+          variant="primary"
+        />
+      );
+    }
+  }
+
+  return <>{stateItems}</>;
 };
+
+// ---- Helper Component: State Row ----
+interface StateRowProps {
+  label: string;
+  value: string;
+  valueClass?: string;
+}
+
+const StateRow: React.FC<StateRowProps> = ({ label, value, valueClass = "text-gray-900 font-medium" }) => (
+  <p>
+    <span className="text-gray-500">{label}:</span>{" "}
+    <span className={valueClass}>{value}</span>
+  </p>
+);
 
 export default ComponentInfoPanel;

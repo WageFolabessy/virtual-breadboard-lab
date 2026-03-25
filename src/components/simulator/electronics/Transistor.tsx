@@ -6,8 +6,7 @@
 // ============================================
 
 import React from "react";
-import { asTransistorState } from "@/lib/types";
-import { COLORS } from "@/lib/constants";
+import { COLORS, COMPONENT_DEFINITIONS } from "@/lib/constants";
 import { areComponentPropsEqual, BaseComponentProps } from "./componentMemo";
 
 interface TransistorProps extends BaseComponentProps {
@@ -16,8 +15,9 @@ interface TransistorProps extends BaseComponentProps {
 
 export const Transistor: React.FC<TransistorProps> = React.memo(
   ({ component, nodes, isSelected, isActive, onClick }) => {
-    const state = asTransistorState(component.state);
-    const isNPN = state?.type === "npn";
+    // TRAIT-DRIVEN: Use transistorType from COMPONENT_DEFINITIONS, not component state
+    const def = COMPONENT_DEFINITIONS[component.type];
+    const isNPN = def?.transistorType === "npn";
 
     // Get 3 pin positions
     const collectorPin = component.pins.find((p) => p.pinType === "collector");

@@ -8,11 +8,13 @@
 // AGENTS.md COMPLIANCE:
 // - This is a "dumb" UI component - receives all data via props
 // - No direct store access - uses callbacks from parent
+// - Uses extracted UI components (InfoPanel, PropertyRow, DeleteButton)
 // - Reusable and testable in isolation
 // ============================================
 
 import React from "react";
 import { Wire, BreadboardNode } from "@/lib/types";
+import { InfoPanel, PropertyRow, DeleteButton } from "@/components/ui";
 
 interface WireInfoPanelProps {
   wire: Wire;
@@ -29,8 +31,7 @@ export const WireInfoPanel: React.FC<WireInfoPanelProps> = ({
   const endNode = nodes.get(wire.endNodeId);
 
   return (
-    <div className="bg-white rounded-lg p-4 border border-gray-200 mb-4">
-      <h3 className="text-sm font-semibold text-gray-600 mb-3">Selected Wire</h3>
+    <InfoPanel title="Selected Wire">
       <div className="space-y-2 text-sm">
         <p>
           <span className="text-gray-500">Color:</span>{" "}
@@ -39,32 +40,12 @@ export const WireInfoPanel: React.FC<WireInfoPanelProps> = ({
             style={{ backgroundColor: wire.color }}
           />
         </p>
-        <p>
-          <span className="text-gray-500">Start Node:</span>{" "}
-          <span className="font-mono text-xs text-gray-700">
-            {startNode?.id || "Unknown"}
-          </span>
-        </p>
-        <p>
-          <span className="text-gray-500">End Node:</span>{" "}
-          <span className="font-mono text-xs text-gray-700">
-            {endNode?.id || "Unknown"}
-          </span>
-        </p>
-        <p>
-          <span className="text-gray-500">ID:</span>{" "}
-          <span className="font-mono text-xs text-gray-700">
-            {wire.id.slice(0, 8)}...
-          </span>
-        </p>
-        <button
-          onClick={() => onDelete(wire.id)}
-          className="mt-2 w-full px-3 py-2.5 bg-red-50 text-red-600 text-sm rounded hover:bg-red-100 transition-colors cursor-pointer"
-        >
-          Delete Wire
-        </button>
+        <PropertyRow label="Start Node" value={startNode?.id || "Unknown"} />
+        <PropertyRow label="End Node" value={endNode?.id || "Unknown"} />
+        <PropertyRow label="ID" value={`${wire.id.slice(0, 8)}...`} />
+        <DeleteButton onClick={() => onDelete(wire.id)} label="Delete Wire" />
       </div>
-    </div>
+    </InfoPanel>
   );
 };
 
