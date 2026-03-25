@@ -47,6 +47,7 @@ import {
 } from "@/hooks/useCircuitActions";
 import { useCanvasInteraction } from "@/hooks/useCanvasInteraction";
 import { usePanZoom } from "@/hooks/usePanZoom";
+import { useSimulationTicker } from "@/hooks/useSimulationTicker";
 
 // ---- Isolated Wire Preview Component ----
 // Uses useSyncExternalStore to subscribe to ref-based state without triggering parent re-renders
@@ -121,6 +122,7 @@ export const Workspace: React.FC = () => {
     selectWire,
   } = useCircuitActions();
   const isComponentActive = useComponentActiveChecker(components, activeNodes);
+  useSimulationTicker(); // Advances 555 Timer clock every 500ms
 
   const {
     containerRef: panZoomContainerRef,

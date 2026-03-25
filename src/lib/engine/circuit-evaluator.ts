@@ -504,10 +504,35 @@ export function evaluateCircuit(
     return result;
   }
   
+  console.log('[VBL-EVAL] Battery seeds — positive:', batteryPositive.size, 'nodes, negative:', batteryNegative.size, 'nodes');
+  
+  // === CREATE ISOLATED SEED SETS (STRICT IMMUTABILITY) ===
+  // CRITICAL: We must NEVER mutate batteryPositive/batteryNegative directly.
+  // Create fresh copies for conditional source injection (555 OUT pin).
+  const initialPositiveSeeds = new Set(batteryPositive);
+  const initialNegativeSeeds = new Set(batteryNegative);
+  
+  // === 555 TIMER OUTPUT INJECTION (UNCONDITIONAL) ===
+  // If any 555 IC has clockState=true, inject its OUT pin into the ISOLATED positive seed set.
+  // Power gating (VCC/GND check) is handled by tick() — here we just inject the signal.
+  for (const comp of components) {
+    if (comp.type !== 'ic_555') continue;
+    const state555 = comp.state as Record<string, unknown>;
+    if (!state555.clockState) continue;
+    
+    const outPin = comp.pins.find(p => p.pinType === 'ic-out');
+    if (!outPin?.connectedNodeId) continue;
+    
+    // Inject OUT pin into the ISOLATED seed set (not batteryPositive!)
+    const outGroup = connectionCache.get(outPin.connectedNodeId) || [outPin.connectedNodeId];
+    outGroup.forEach(n => initialPositiveSeeds.add(n));
+    console.log('[VBL-EVAL] 555 clockState=TRUE → Injecting OUT pin:', outPin.connectedNodeId);
+  }
+  
   // === STEP 1: Check for SHORT CIRCUIT (wire-only path from + to -) ===
   const shortCircuitCheck = checkShortCircuit(
-    batteryPositive,
-    batteryNegative,
+    initialPositiveSeeds,
+    initialNegativeSeeds,
     wireAdjacency,
     connectionCache
   );
@@ -537,7 +562,7 @@ export function evaluateCircuit(
   for (let pass = 0; pass < MAX_STABILIZATION_PASSES; pass++) {
     // Flood from POSITIVE (forward direction) — passing current context for transistor checks
     const newPositive = floodFill(
-      batteryPositive,
+      initialPositiveSeeds,
       wireAdjacency,
       componentAdjacency,
       connectionCache,
@@ -548,7 +573,7 @@ export function evaluateCircuit(
     
     // Flood from NEGATIVE (backward direction)
     const newNegative = floodFill(
-      batteryNegative,
+      initialNegativeSeeds,
       wireAdjacency,
       componentAdjacency,
       connectionCache,
@@ -563,6 +588,10 @@ export function evaluateCircuit(
     
     positiveReachable = newPositive;
     negativeReachable = newNegative;
+    
+    if (pass === 0) {
+      console.log('[VBL-EVAL] Pass 0 flood-fill — positive:', newPositive.size, 'nodes, negative:', newNegative.size, 'nodes');
+    }
     
     if (!hasChanged) break; // Stable — no transistors changed state
   }

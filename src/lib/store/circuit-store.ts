@@ -234,6 +234,7 @@ interface CircuitStoreActions {
   
   // Simulation
   runSimulation: () => void;
+  tick: () => void;
   
   // General
   clearAll: () => void;
@@ -377,6 +378,7 @@ export const useCircuitStore = create<CircuitStore>()(
           case 'diode':
           case 'npn_transistor':
           case 'pnp_transistor':
+          case 'ic_555':
             state.placeComponentPin(nodeId);
             break;
             
@@ -558,14 +560,16 @@ export const useCircuitStore = create<CircuitStore>()(
         // DIP-8 must straddle the center trench (Row E ↔ Row F).
         // Pins 1-4 on the clicked row, Pins 5-8 on the opposite row (reversed, standard U-shape).
         if (definition.pinCount === 8) {
-          const rootRow = node.id.split('-')[0]; // e.g. "E" from "E-10"
-          const rootCol = node.position.col;
+          const parts = node.id.split('-');
+          const rootRow = parts[0]; // e.g. "E" from "E-10"
+          const rootCol = parseInt(parts[1], 10);
           
           // Enforce placement only on trench-edge rows (E or F)
           const TRENCH_MAP: Record<string, string> = { 'E': 'F', 'F': 'E' };
           const oppositeRow = TRENCH_MAP[rootRow];
           if (!oppositeRow) {
-            // User clicked a non-trench row — reject silently
+            // User clicked a non-trench row — tell them why
+            alert('IC must be placed on Row E or Row F to straddle the center trench.');
             return;
           }
           
@@ -578,7 +582,10 @@ export const useCircuitStore = create<CircuitStore>()(
           for (let offset = 0; offset < 4; offset++) {
             const targetId = `${rootRow}-${rootCol + offset}`;
             const targetNode = state.nodes.get(targetId);
-            if (!targetNode || targetNode.isOccupied) return;
+            if (!targetNode || targetNode.isOccupied) {
+              console.warn(`[VBL] DIP-8 placement blocked: node ${targetId} ${!targetNode ? 'does not exist' : 'is occupied'}`);
+              return;
+            }
             pinNodeIds.push(targetId);
           }
           
@@ -586,9 +593,14 @@ export const useCircuitStore = create<CircuitStore>()(
           for (let offset = 3; offset >= 0; offset--) {
             const targetId = `${oppositeRow}-${rootCol + offset}`;
             const targetNode = state.nodes.get(targetId);
-            if (!targetNode || targetNode.isOccupied) return;
+            if (!targetNode || targetNode.isOccupied) {
+              console.warn(`[VBL] DIP-8 placement blocked: node ${targetId} ${!targetNode ? 'does not exist' : 'is occupied'}`);
+              return;
+            }
             pinNodeIds.push(targetId);
           }
+          
+          console.log('[VBL] Placing IC at:', node.id, 'Target Nodes:', pinNodeIds);
           
           // All 8 nodes validated — place the IC
           get().saveSnapshot();
@@ -808,39 +820,85 @@ export const useCircuitStore = create<CircuitStore>()(
         const result = evaluateCircuit(state.nodes, state.components, state.wires);
         const newActiveNodes = getActiveNodes(result.activePath, state.nodes);
         
-        // CRITICAL: Avoid creating new Set reference if contents are identical
-        // This prevents cascading re-renders when Sets haven't actually changed
-        
-        // Helper function to compare sets
-        const areSetsEqual = (setA: Set<string>, setB: Set<string>): boolean => {
-          if (setA.size !== setB.size) return false;
-          for (const item of setA) {
-            if (!setB.has(item)) return false;
-          }
-          return true;
-        };
-        
-        // Compare activeNodes
-        const activeNodesToSet = areSetsEqual(state.activeNodes, newActiveNodes)
-          ? state.activeNodes
-          : newActiveNodes;
-        
-        // Compare positiveNodes
-        const positiveNodesToSet = areSetsEqual(state.positiveNodes, result.positiveReachable)
-          ? state.positiveNodes
-          : result.positiveReachable;
-        
-        // Compare negativeNodes
-        const negativeNodesToSet = areSetsEqual(state.negativeNodes, result.negativeReachable)
-          ? state.negativeNodes
-          : result.negativeReachable;
-        
         set({
           simulation: result,
-          activeNodes: activeNodesToSet,
-          positiveNodes: positiveNodesToSet,
-          negativeNodes: negativeNodesToSet,
+          activeNodes: newActiveNodes,
+          positiveNodes: result.positiveReachable,
+          negativeNodes: result.negativeReachable,
         });
+        
+        // DEBUG: Verify state was actually written
+        const afterState = get();
+        console.log('[VBL-STORE] runSimulation set() — positiveNodes:', afterState.positiveNodes.size, ', negativeNodes:', afterState.negativeNodes.size);
+      },
+      
+      tick: () => {
+        const state = get();
+        console.log('[VBL-TICK] Ticker fired — components:', state.components.length, ', positiveNodes:', state.positiveNodes.size, ', negativeNodes:', state.negativeNodes.size);
+        let anyChanged = false;
+        
+        // Helper: check if a pin's node reaches a voltage set (connection-group-aware)
+        const pinReaches = (pinNodeId: string, voltageSet: Set<string>): boolean => {
+          // Direct check first
+          if (voltageSet.has(pinNodeId)) return true;
+          // Expand through connection group
+          const node = state.nodes.get(pinNodeId);
+          if (!node) return false;
+          // Check all nodes in the same connection group
+          for (const [id, n] of state.nodes) {
+            if (n.connectionGroup === node.connectionGroup && voltageSet.has(id)) {
+              return true;
+            }
+          }
+          return false;
+        };
+        
+        // Find all 555 ICs and toggle their clock if powered
+        const updatedComponents = state.components.map(comp => {
+          if (comp.type !== 'ic_555') return comp;
+          
+          // Check if this 555 is powered using last simulation results
+          const vccPin = comp.pins.find(p => p.pinType === 'ic-vcc');
+          const gndPin = comp.pins.find(p => p.pinType === 'ic-gnd');
+          if (!vccPin?.connectedNodeId || !gndPin?.connectedNodeId) return comp;
+          
+          const vccPowered = pinReaches(vccPin.connectedNodeId, state.positiveNodes);
+          const gndPowered = pinReaches(gndPin.connectedNodeId, state.negativeNodes);
+          
+          console.log('[VBL-TICK] 555 power check — VCC:', vccPin.connectedNodeId, '→', vccPowered, ', GND:', gndPin.connectedNodeId, '→', gndPowered, ', positiveNodes size:', state.positiveNodes.size, ', negativeNodes size:', state.negativeNodes.size);
+          
+          if (vccPowered && gndPowered) {
+            // 555 is powered — toggle clock output
+            const currentState = comp.state as Record<string, unknown>;
+            const newClockState = !currentState.clockState;
+            anyChanged = true;
+            console.log('[VBL-TICK] 555 clockState toggled →', newClockState);
+            return {
+              ...comp,
+              state: {
+                ...currentState,
+                clockState: newClockState,
+              },
+            };
+          }
+          
+          // Not powered — ensure clock is off
+          const currentState = comp.state as Record<string, unknown>;
+          if (currentState.clockState) {
+            anyChanged = true;
+            return {
+              ...comp,
+              state: { ...currentState, clockState: false },
+            };
+          }
+          
+          return comp;
+        });
+        
+        if (anyChanged) {
+          set({ components: updatedComponents });
+          get().runSimulation();
+        }
       },
       
       // ---- General ----

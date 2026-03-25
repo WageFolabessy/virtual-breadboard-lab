@@ -88,6 +88,7 @@ export interface TransistorState {
 
 export interface IC555State {
   isActive: boolean;
+  clockState: boolean; // Current output level of the oscillator
 }
 
 export type ComponentState = BatteryState | LEDState | ResistorState | SwitchState | CapacitorState | BuzzerState | DiodeState | TransistorState | IC555State | Record<string, unknown>;

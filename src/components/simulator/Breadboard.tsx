@@ -77,6 +77,7 @@ const BreadboardNodeComponent: React.FC<NodeProps> = React.memo(
       if (node.isOccupied || isWireStart || isPlacementTarget) {
         return null; // No glow when in special states
       }
+      if (isPositive && isNegative) return "rgba(168, 85, 247, 0.7)"; // Purple blend (both potentials)
       if (isPositive) return COLORS.POSITIVE_POTENTIAL;
       if (isNegative) return COLORS.NEGATIVE_POTENTIAL;
       return null;

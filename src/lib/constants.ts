@@ -264,7 +264,7 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
     description: 'DIP-8 timer IC — straddles center trench',
     pinCount: 8,
     pinTypes: ['ic-gnd', 'ic-trig', 'ic-out', 'ic-rst', 'ic-ctrl', 'ic-thr', 'ic-dis', 'ic-vcc'],
-    defaultState: { isActive: false },
+    defaultState: { isActive: false, clockState: false },
     icon: '🔲',
     isLoad: true,
     isPolarized: true,
