@@ -100,12 +100,11 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // Save (Ctrl/Cmd+S)
+      // Save/Export (Ctrl/Cmd+S)
       if (key === SHORTCUTS.SAVE.toLowerCase()) {
         if (e.ctrlKey || e.metaKey) {
           e.preventDefault();
-          // Store autosaves via persist, just provide visual feedback
-          console.log("Circuit saved to Local Storage!");
+          useCircuitStore.getState().exportCircuit();
         }
         return;
       }

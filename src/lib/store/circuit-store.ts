@@ -239,6 +239,10 @@ interface CircuitStoreActions {
   clearAll: () => void;
   loadCircuit: (components: CircuitComponent[], wires: Wire[], isHistory?: boolean) => void;
   
+  // Export / Import
+  exportCircuit: () => void;
+  importCircuit: (jsonString: string) => void;
+  
   // History Actions
   undo: () => void;
   redo: () => void;
@@ -859,6 +863,85 @@ export const useCircuitStore = create<CircuitStore>()(
           set({ nodes: createBreadboardNodes() });
         }
         // Note: If nodes exist (from hydration), do nothing - hydration is the source of truth
+      },
+      
+      // ---- Export / Import ----
+      exportCircuit: () => {
+        const state = get();
+        const exportData: SerializedState = {
+          version: 1,
+          components: state.components.map(serializeComponent),
+          wires: state.wires.map(w => ({
+            id: w.id,
+            startNodeId: w.startNodeId,
+            endNodeId: w.endNodeId,
+            color: w.color,
+          })),
+        };
+        
+        const json = JSON.stringify(exportData, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = 'circuit.json';
+        anchor.click();
+        URL.revokeObjectURL(url);
+      },
+      
+      importCircuit: (jsonString: string) => {
+        try {
+          const parsed = JSON.parse(jsonString) as SerializedState;
+          
+          if (!parsed.version || !Array.isArray(parsed.components) || !Array.isArray(parsed.wires)) {
+            console.error('[VBL] Invalid circuit file format');
+            return;
+          }
+          
+          const freshNodes = createBreadboardNodes();
+          
+          // Deserialize components
+          const components: CircuitComponent[] = [];
+          for (const sc of parsed.components) {
+            const component = deserializeComponent(sc, freshNodes);
+            if (component) {
+              components.push(component);
+              component.pins.forEach(pin => {
+                if (pin.connectedNodeId) {
+                  const node = freshNodes.get(pin.connectedNodeId);
+                  if (node) {
+                    freshNodes.set(pin.connectedNodeId, {
+                      ...node,
+                      isOccupied: true,
+                      occupiedBy: component.id,
+                    });
+                  }
+                }
+              });
+            }
+          }
+          
+          // Validate wires
+          const wires: Wire[] = parsed.wires.filter(w =>
+            freshNodes.has(w.startNodeId) && freshNodes.has(w.endNodeId)
+          );
+          
+          // Overwrite state, clear history
+          set({
+            nodes: freshNodes,
+            components,
+            wires,
+            selectedComponentId: null,
+            selectedWireId: null,
+            placementComponent: null,
+            placementPins: [],
+            history: { past: [], future: [] },
+          });
+          
+          get().runSimulation();
+        } catch (e) {
+          console.error('[VBL] Failed to import circuit:', e);
+        }
       },
     }),
     {
