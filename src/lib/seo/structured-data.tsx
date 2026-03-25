@@ -179,11 +179,7 @@ export function getOrganizationSchema(): WithContext<Thing> {
     name: "Cangkir",
     url: "https://cangkir.tech",
     logo: "https://vbl.eproject.tech/icon.png",
-    sameAs: [
-      // Add social media profiles here when available
-      // 'https://github.com/cangkir',
-      // 'https://linkedin.com/company/cangkir',
-    ],
+    sameAs: ["https://www.instagram.com/co.cangkir?igsh=bm9ieGppeW0xMmpw"],
     description:
       "Cangkir builds modern web applications and educational tools for engineering students and hobbyists.",
   };
