@@ -42,7 +42,7 @@ export function getSoftwareApplicationSchema(): WithContext<Thing> {
     author: {
       "@type": "Organization",
       name: "Cangkir",
-      url: "https://eproject.tech",
+      url: "https://cangkir.tech",
     },
     datePublished: "2026-03-26",
     inLanguage: ["en", "id"],
@@ -177,7 +177,7 @@ export function getOrganizationSchema(): WithContext<Thing> {
     "@context": "https://schema.org",
     "@type": "Organization",
     name: "Cangkir",
-    url: "https://eproject.tech",
+    url: "https://cangkir.tech",
     logo: "https://vbl.eproject.tech/icon.png",
     sameAs: [
       // Add social media profiles here when available

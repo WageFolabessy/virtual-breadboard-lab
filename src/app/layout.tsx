@@ -57,7 +57,7 @@ export const metadata: Metadata = {
     "gerbang logika simulator",
     "Cangkir",
   ],
-  authors: [{ name: "Cangkir", url: "https://eproject.tech" }],
+  authors: [{ name: "Cangkir", url: "https://cangkir.tech" }],
   creator: "Cangkir",
   publisher: "Cangkir",
   category: "Educational Technology",
