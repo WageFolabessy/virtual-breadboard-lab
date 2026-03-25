@@ -826,15 +826,10 @@ export const useCircuitStore = create<CircuitStore>()(
           positiveNodes: result.positiveReachable,
           negativeNodes: result.negativeReachable,
         });
-        
-        // DEBUG: Verify state was actually written
-        const afterState = get();
-        console.log('[VBL-STORE] runSimulation set() — positiveNodes:', afterState.positiveNodes.size, ', negativeNodes:', afterState.negativeNodes.size);
       },
       
       tick: () => {
         const state = get();
-        console.log('[VBL-TICK] Ticker fired — components:', state.components.length, ', positiveNodes:', state.positiveNodes.size, ', negativeNodes:', state.negativeNodes.size);
         let anyChanged = false;
         
         // Helper: check if a pin's node reaches a voltage set (connection-group-aware)
@@ -865,14 +860,11 @@ export const useCircuitStore = create<CircuitStore>()(
           const vccPowered = pinReaches(vccPin.connectedNodeId, state.positiveNodes);
           const gndPowered = pinReaches(gndPin.connectedNodeId, state.negativeNodes);
           
-          console.log('[VBL-TICK] 555 power check — VCC:', vccPin.connectedNodeId, '→', vccPowered, ', GND:', gndPin.connectedNodeId, '→', gndPowered, ', positiveNodes size:', state.positiveNodes.size, ', negativeNodes size:', state.negativeNodes.size);
-          
           if (vccPowered && gndPowered) {
             // 555 is powered — toggle clock output
             const currentState = comp.state as Record<string, unknown>;
             const newClockState = !currentState.clockState;
             anyChanged = true;
-            console.log('[VBL-TICK] 555 clockState toggled →', newClockState);
             return {
               ...comp,
               state: {

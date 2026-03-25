@@ -504,8 +504,6 @@ export function evaluateCircuit(
     return result;
   }
   
-  console.log('[VBL-EVAL] Battery seeds — positive:', batteryPositive.size, 'nodes, negative:', batteryNegative.size, 'nodes');
-  
   // === CREATE ISOLATED SEED SETS (STRICT IMMUTABILITY) ===
   // CRITICAL: We must NEVER mutate batteryPositive/batteryNegative directly.
   // Create fresh copies for conditional source injection (555 OUT pin).
@@ -526,7 +524,6 @@ export function evaluateCircuit(
     // Inject OUT pin into the ISOLATED seed set (not batteryPositive!)
     const outGroup = connectionCache.get(outPin.connectedNodeId) || [outPin.connectedNodeId];
     outGroup.forEach(n => initialPositiveSeeds.add(n));
-    console.log('[VBL-EVAL] 555 clockState=TRUE → Injecting OUT pin:', outPin.connectedNodeId);
   }
   
   // === STEP 1: Check for SHORT CIRCUIT (wire-only path from + to -) ===
@@ -588,10 +585,6 @@ export function evaluateCircuit(
     
     positiveReachable = newPositive;
     negativeReachable = newNegative;
-    
-    if (pass === 0) {
-      console.log('[VBL-EVAL] Pass 0 flood-fill — positive:', newPositive.size, 'nodes, negative:', newNegative.size, 'nodes');
-    }
     
     if (!hasChanged) break; // Stable — no transistors changed state
   }
