@@ -2,6 +2,7 @@
 
 import React, { useRef } from "react";
 import { useCircuitStore } from "@/lib/store/circuit-store";
+import { useShallow } from "zustand/react/shallow";
 import { ActionButton } from "@/components/ui";
 
 // ---- Icons for Header Actions ----
@@ -9,11 +10,20 @@ const ExportIcon = () => <span className="text-base">📤</span>;
 const ImportIcon = () => <span className="text-base">📥</span>;
 const ClearIcon = () => <span className="text-base">🗑️</span>;
 
+import Image from "next/image";
+import logo from "@/app/icon.png";
+
 export const Header: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const exportCircuit = useCircuitStore((s) => s.exportCircuit);
-  const importCircuit = useCircuitStore((s) => s.importCircuit);
-  const clearAll = useCircuitStore((s) => s.clearAll);
+
+  // AGENTS.MD COMPLIANCE: Use useShallow for consistency (functions have stable refs, but this maintains pattern consistency)
+  const { exportCircuit, importCircuit, clearAll } = useCircuitStore(
+    useShallow((state) => ({
+      exportCircuit: state.exportCircuit,
+      importCircuit: state.importCircuit,
+      clearAll: state.clearAll,
+    })),
+  );
 
   const handleImportClick = () => {
     fileInputRef.current?.click();
@@ -48,18 +58,28 @@ export const Header: React.FC = () => {
 
   return (
     <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shrink-0">
-      <div>
-        <h1
-          className="text-xl font-bold text-gray-900 tracking-tight"
-          title="A fast, interactive, and purely logic-based web application for safely designing and testing basic electronic circuits without physical components."
-        >
-          Virtual Breadboard Lab (VBL)
-        </h1>
-        <p className="text-sm text-gray-500 hidden md:block mt-0.5">
-          A fast, interactive, and purely logic-based web application for safely
-          designing and testing basic electronic circuits without physical
-          components.
-        </p>
+      <div className="flex items-center gap-3">
+        <Image
+          src={logo}
+          alt="Virtual Breadboard Lab Logo"
+          width={70}
+          height={70}
+          className="rounded-lg shadow-sm"
+          priority
+        />
+        <div>
+          <h1
+            className="text-xl font-bold text-gray-900 tracking-tight"
+            title="A fast, interactive, and purely logic-based web application for safely designing and testing basic electronic circuits without physical components."
+          >
+            Virtual Breadboard Lab
+          </h1>
+          <p className="text-sm text-gray-500 hidden md:block mt-0.5">
+            A fast, interactive, and purely logic-based web application for
+            safely designing and testing basic electronic circuits without
+            physical components.
+          </p>
+        </div>
       </div>
 
       {/* Action Buttons - Using extracted ActionButton component */}

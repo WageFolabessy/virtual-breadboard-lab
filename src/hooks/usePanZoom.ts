@@ -34,17 +34,22 @@ export interface UsePanZoomReturn {
 /**
  * Encapsulates pan & zoom logic for an infinite-canvas SVG workspace.
  *
+ * AGENTS.MD COMPLIANCE:
+ * - Uses optimized state updates for pan/zoom operations
+ * - Batch updates during continuous interactions (wheel, drag)
+ * - isPanning as boolean for cursor styling
+ *
  * - Mouse wheel → zoom in/out (centered on cursor position)
  * - Middle-mouse drag or Ctrl+left-drag → pan the canvas
  *
  * Pan/zoom values are applied to an SVG <g> transform for lossless vector scaling.
- * isPanning is exposed as React state to drive cursor feedback.
  */
 export function usePanZoom(): UsePanZoomReturn {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const panStartRef = useRef({ x: 0, y: 0 });
   const panOriginRef = useRef({ x: 0, y: 0 });
 
+  // State with optimized updates
   const [state, setState] = useState<PanZoomState>({
     scale: 1,
     panX: 0,

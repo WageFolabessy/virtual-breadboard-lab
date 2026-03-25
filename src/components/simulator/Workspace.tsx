@@ -31,6 +31,7 @@ import { Wire, WirePreview } from "./Wire";
 import { renderComponent } from "./ComponentRegistry";
 import { ComponentInfoPanel, WireInfoPanel } from "./panels";
 import { Header } from "@/components/Header";
+import { Footer } from "@/components/Footer";
 import { useHydration } from "@/hooks/useHydration";
 import {
   useCircuitActions,
@@ -181,7 +182,9 @@ export const Workspace: React.FC = () => {
                 {components.map((component) => {
                   const isSelected = selectedComponentId === component.id;
                   const isActive = isComponentActive(component.id);
-                  const simulationState = simulation.componentStates.get(component.id);
+                  const simulationState = simulation.componentStates.get(
+                    component.id,
+                  );
 
                   return renderComponent({
                     component,
@@ -302,6 +305,9 @@ export const Workspace: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Footer (Extracted per AGENTS.md) */}
+      <Footer />
     </div>
   );
 };
