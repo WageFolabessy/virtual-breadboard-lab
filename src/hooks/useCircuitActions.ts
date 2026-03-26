@@ -31,7 +31,11 @@ export function useCircuitActions() {
     useCircuitStore.getState().cancelComponentPlacement();
   }, []);
 
-  return { selectComponent, removeWire, toggleSwitch, removeComponent, selectWire, cancelComponentPlacement };
+  const setButtonPressed = useCallback((componentId: string, pressed: boolean) => {
+    useCircuitStore.getState().setButtonPressed(componentId, pressed);
+  }, []);
+
+  return { selectComponent, removeWire, toggleSwitch, removeComponent, selectWire, cancelComponentPlacement, setButtonPressed };
 }
 
 /**

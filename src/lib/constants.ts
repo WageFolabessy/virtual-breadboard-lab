@@ -182,7 +182,7 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
     icon: '🔧',
     isLoad: true,
     isPolarized: false,
-    isConductive: false,
+    isConductive: true,
     isPowerSource: false,
     category: 'passive',
   },
@@ -287,6 +287,21 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
     isPowerSource: false,
     category: 'ic',
     isTimed: true, // Requires periodic tick updates
+  },
+  tactile_button: {
+    type: 'tactile_button',
+    name: 'Tactile Button',
+    description: '4-pin push button — straddles center trench',
+    pinCount: 4,
+    pinTypes: ['tb-top-left', 'tb-bottom-left', 'tb-top-right', 'tb-bottom-right'],
+    defaultState: { isActive: false },
+    icon: '🔲',
+    isLoad: false,
+    isPolarized: false,
+    isConductive: true,
+    isPowerSource: false,
+    category: 'control',
+    isToggleable: false, // Momentary — uses press/release, not toggle
   },
 } as const;
 

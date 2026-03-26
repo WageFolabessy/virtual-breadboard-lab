@@ -19,6 +19,7 @@ import {
   asLEDState,
   asSwitchState,
   asBuzzerState,
+  asTactileButtonState,
 } from "@/lib/types";
 import { COMPONENT_DEFINITIONS } from "@/lib/constants";
 import {
@@ -31,6 +32,7 @@ import {
   Diode,
   Transistor,
   Timer555,
+  TactileButton,
 } from "./electronics";
 
 // ---- Renderer Props Interface ----
@@ -42,6 +44,8 @@ export interface ComponentRendererProps {
   simulationState?: ComponentState;
   onSelect: () => void;
   onToggle?: () => void;
+  onPress?: () => void;
+  onRelease?: () => void;
   isRecentlyPlaced?: boolean;
 }
 
@@ -170,26 +174,52 @@ const COMPONENT_RENDERERS: Partial<Record<ComponentType, ComponentRenderer>> = {
       onClick={onSelect}
     />
   ),
+
+  tactile_button: ({
+    component,
+    nodes,
+    isSelected,
+    isActive,
+    onSelect,
+    onPress,
+    onRelease,
+  }) => {
+    const btnState = asTactileButtonState(component.state);
+    return (
+      <TactileButton
+        key={component.id}
+        component={component}
+        nodes={nodes}
+        isSelected={isSelected}
+        isActive={isActive && (btnState?.isActive ?? false)}
+        onPress={onPress ?? (() => {})}
+        onRelease={onRelease ?? (() => {})}
+        onClick={onSelect}
+      />
+    );
+  },
 };
 
 // ---- Render Component Function ----
 // Universal render function that uses the registry
-export function renderComponent(props: ComponentRendererProps): React.ReactNode {
+export function renderComponent(
+  props: ComponentRendererProps,
+): React.ReactNode {
   const { component, isRecentlyPlaced } = props;
   const renderer = COMPONENT_RENDERERS[component.type];
-  
+
   if (!renderer) {
     // 'wire' type is handled separately, so it's expected to not have a renderer
-    if (component.type !== 'wire' && COMPONENT_DEFINITIONS[component.type]) {
+    if (component.type !== "wire" && COMPONENT_DEFINITIONS[component.type]) {
       console.warn(
-        `Component type "${component.type}" exists in COMPONENT_DEFINITIONS but has no renderer in COMPONENT_RENDERERS`
+        `Component type "${component.type}" exists in COMPONENT_DEFINITIONS but has no renderer in COMPONENT_RENDERERS`,
       );
     }
     return null;
   }
-  
+
   const renderedComponent = renderer(props);
-  
+
   // Wrap with animation group if recently placed
   if (isRecentlyPlaced) {
     return (
@@ -198,7 +228,7 @@ export function renderComponent(props: ComponentRendererProps): React.ReactNode 
       </g>
     );
   }
-  
+
   return renderedComponent;
 }
 

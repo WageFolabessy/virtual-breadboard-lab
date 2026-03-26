@@ -235,6 +235,7 @@ interface CircuitStoreActions {
   removeComponent: (componentId: string) => void;
   selectComponent: (componentId: string | null) => void;
   toggleSwitch: (componentId: string) => void;
+  setButtonPressed: (componentId: string, pressed: boolean) => void;
   
   // Generic delete action
   deleteSelected: () => void; // NEW: Delete currently selected component or wire
@@ -604,6 +605,98 @@ export const useCircuitStore = create<CircuitStore>()(
           return;
         }
         
+        // ---- 4-PIN TRENCH-STRADDLING PLACEMENT (Tactile Button) ----
+        // 4-pin components straddle the center trench (Row E ↔ Row F).
+        // Pin layout: 2 columns × 2 rows
+        //   tb-top-left  (clickedRow, col)    |  tb-top-right  (clickedRow, col+1)
+        //   tb-bottom-left (oppositeRow, col) |  tb-bottom-right (oppositeRow, col+1)
+        if (definition.pinCount === 4) {
+          const parts = node.id.split('-');
+          const rootRow = parts[0];
+          const rootCol = parseInt(parts[1], 10);
+          
+          // Enforce placement only on trench-edge rows (E or F)
+          const TRENCH_MAP: Record<string, string> = { 'E': 'F', 'F': 'E' };
+          const oppositeRow = TRENCH_MAP[rootRow];
+          if (!oppositeRow) {
+            alert('Tactile button must be placed on Row E or Row F to straddle the center trench.');
+            return;
+          }
+          
+          // Pin node mapping: [top-left, bottom-left, top-right, bottom-right]
+          const pinNodeIds: string[] = [];
+          const targetIds = [
+            `${rootRow}-${rootCol}`,        // tb-top-left
+            `${oppositeRow}-${rootCol}`,     // tb-bottom-left
+            `${rootRow}-${rootCol + 1}`,     // tb-top-right
+            `${oppositeRow}-${rootCol + 1}`, // tb-bottom-right
+          ];
+          
+          for (const targetId of targetIds) {
+            const targetNode = state.nodes.get(targetId);
+            if (!targetNode || targetNode.isOccupied) {
+              console.warn(`[VBL] Tactile button placement blocked: node ${targetId} ${!targetNode ? 'does not exist' : 'is occupied'}`);
+              return;
+            }
+            pinNodeIds.push(targetId);
+          }
+          
+          // All 4 nodes validated — place the component
+          get().saveSnapshot();
+          const componentId = generateId();
+          const pins = createComponentPins(state.placementComponent, componentId);
+          
+          pins.forEach((pin, index) => {
+            pin.connectedNodeId = pinNodeIds[index];
+          });
+          
+          // Canvas position: center of the 4-pin footprint
+          const topLeft = state.nodes.get(pinNodeIds[0])!;
+          const bottomRight = state.nodes.get(pinNodeIds[3])!;
+          const canvasPosition = {
+            x: (topLeft.canvasPosition.x + bottomRight.canvasPosition.x) / 2,
+            y: (topLeft.canvasPosition.y + bottomRight.canvasPosition.y) / 2,
+          };
+          
+          const componentState = getDefaultComponentState(state.placementComponent);
+          
+          const newComponent: CircuitComponent = {
+            id: componentId,
+            type: state.placementComponent,
+            pins,
+            canvasPosition,
+            rotation: 0,
+            state: componentState,
+          };
+          
+          const updatedNodes = new Map(state.nodes);
+          pinNodeIds.forEach((pinNodeId) => {
+            const n = updatedNodes.get(pinNodeId);
+            if (n) {
+              updatedNodes.set(pinNodeId, {
+                ...n,
+                isOccupied: true,
+                occupiedBy: componentId,
+              });
+            }
+          });
+          
+          set({
+            components: [...state.components, newComponent],
+            nodes: updatedNodes,
+            placementComponent: null,
+            placementPins: [],
+            selectedTool: 'select',
+          });
+          
+          // Sound feedback + animation
+          globalSoundSystem.playSnap();
+          markAsRecentlyPlaced(componentId, state.recentlyPlacedIds, set);
+          
+          get().runSimulation();
+          return;
+        }
+        
         // ---- DIP-8 AUTO-PLACEMENT (ICs like 555 Timer) ----
         // DIP-8 must straddle the center trench (Row E ↔ Row F).
         // Pins 1-4 on the clicked row, Pins 5-8 on the opposite row (reversed, standard U-shape).
@@ -846,6 +939,30 @@ export const useCircuitStore = create<CircuitStore>()(
             return {
               ...c,
               state: { ...currentState, isClosed: !currentState.isClosed },
+            };
+          }
+          return c;
+        });
+        
+        set({ components: newComponents });
+        get().runSimulation();
+      },
+      
+      // ---- Momentary Button Actions ----
+      setButtonPressed: (componentId, pressed) => {
+        const state = get();
+        const component = state.components.find((c) => c.id === componentId);
+        if (!component) return;
+        
+        const currentState = component.state as Record<string, unknown>;
+        // Skip if state hasn't changed
+        if (currentState.isActive === pressed) return;
+        
+        const newComponents = state.components.map((c) => {
+          if (c.id === componentId) {
+            return {
+              ...c,
+              state: { ...currentState, isActive: pressed },
             };
           }
           return c;

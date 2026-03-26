@@ -256,6 +256,10 @@ function componentConducts(
     return state.isClosed === true;
   }
   
+  // Tactile button: always conducts (paired pins are permanently shorted).
+  // Cross-pair routing is handled in floodFill, not here.
+  // This ensures the component is never skipped during traversal.
+  
   // Default: conductive components conduct
   return true;
 }
@@ -339,6 +343,48 @@ function floodFill(
         
         if (direction === 'forward' && !isPositiveEntry) continue;
         if (direction === 'backward' && !isNegativeEntry) continue;
+      }
+      
+      // ---- TACTILE BUTTON PAIRED-PIN ROUTING ----
+      // Physical wiring: Left pair (tb-top-left ↔ tb-bottom-left) permanently shorted.
+      //                  Right pair (tb-top-right ↔ tb-bottom-right) permanently shorted.
+      //                  Cross-pair (left ↔ right) only when isActive === true.
+      if (component.pins.length === 4 && component.pins[0]?.pinType === 'tb-top-left') {
+        const isLeftPin = pinType === 'tb-top-left' || pinType === 'tb-bottom-left';
+        const isRightPin = pinType === 'tb-top-right' || pinType === 'tb-bottom-right';
+        const btnState = component.state as Record<string, unknown>;
+        const isActive = btnState.isActive === true;
+        
+        // Compute which pins are reachable from the current entry pin
+        const reachablePinTypes: string[] = [];
+        if (isLeftPin) {
+          // Paired pin on the same side (always shorted)
+          reachablePinTypes.push(pinType === 'tb-top-left' ? 'tb-bottom-left' : 'tb-top-left');
+          // Cross-pair (only when pressed)
+          if (isActive) {
+            reachablePinTypes.push('tb-top-right', 'tb-bottom-right');
+          }
+        } else if (isRightPin) {
+          reachablePinTypes.push(pinType === 'tb-top-right' ? 'tb-bottom-right' : 'tb-top-right');
+          if (isActive) {
+            reachablePinTypes.push('tb-top-left', 'tb-bottom-left');
+          }
+        }
+        
+        // Traverse only to computed reachable pins
+        for (const reachableType of reachablePinTypes) {
+          const targetPin = component.pins.find(p => p.pinType === reachableType);
+          if (!targetPin?.connectedNodeId) continue;
+          const targetGroup = cache.get(targetPin.connectedNodeId) || [targetPin.connectedNodeId];
+          for (const nodeId of targetGroup) {
+            if (!visited.has(nodeId)) {
+              visited.add(nodeId);
+              reachable.add(nodeId);
+              queue.push(nodeId);
+            }
+          }
+        }
+        continue; // Skip generic traversal for this component
       }
       
       // Add all nodes on the other side of the component
@@ -603,6 +649,38 @@ export function evaluateCircuit(
     negativeReachable = newNegative;
     
     if (!hasChanged) break; // Stable — no transistors changed state
+  }
+  
+  // === POST-FLOOD-FILL SHORT CIRCUIT DETECTION ===
+  // After traversal through conductive components (resistors, closed switches, etc.),
+  // check if positive and negative reachable sets overlap. Overlapping nodes mean
+  // current can flow from + to - through conductive bridges without being consumed
+  // by a load — this is a short circuit that the wire-only check above cannot catch.
+  {
+    let hasIntersection = false;
+    const intersectionPath: string[] = [];
+    for (const node of positiveReachable) {
+      if (negativeReachable.has(node)) {
+        hasIntersection = true;
+        intersectionPath.push(node);
+        break; // One overlap is sufficient to confirm short
+      }
+    }
+    
+    if (hasIntersection) {
+      // Simulate tripped breaker: clear all voltage potential
+      return {
+        status: 'short-circuit',
+        isCircuitComplete: false,
+        activePath: intersectionPath,
+        powerSourceId: powerSource.id,
+        componentStates: result.componentStates,
+        shortCircuitPath: intersectionPath,
+        message: 'SHORT CIRCUIT! Positive and negative paths have merged through conductive components',
+        positiveReachable: new Set<string>(),
+        negativeReachable: new Set<string>(),
+      };
+    }
   }
   
   // === STEP 4: EVALUATE EACH COMPONENT (Trait-Driven) ===

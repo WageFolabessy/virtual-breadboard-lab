@@ -76,7 +76,14 @@ IsolatedWirePreview.displayName = "IsolatedWirePreview";
 export const Workspace: React.FC = () => {
   // ---- State subscriptions ----
   // Bundle reference-type selectors (Map/Array/Set) with useShallow
-  const { nodes, components, wires, simulation, activeNodes, recentlyPlacedIds } = useCircuitStore(
+  const {
+    nodes,
+    components,
+    wires,
+    simulation,
+    activeNodes,
+    recentlyPlacedIds,
+  } = useCircuitStore(
     useShallow((state) => ({
       nodes: state.nodes,
       components: state.components,
@@ -114,6 +121,7 @@ export const Workspace: React.FC = () => {
     toggleSwitch,
     removeComponent,
     selectWire,
+    setButtonPressed,
   } = useCircuitActions();
   const isComponentActive = useComponentActiveChecker(components, activeNodes);
   useSimulationTicker(); // Advances 555 Timer clock every 500ms
@@ -156,7 +164,10 @@ export const Workspace: React.FC = () => {
         <ComponentLibrary />
 
         {/* Tour target wrapper - NO overflow:hidden to prevent Joyride clipping */}
-        <div data-tour="breadboard" className="flex-1 flex flex-col lg:flex-row min-h-[50vh] lg:min-h-0">
+        <div
+          data-tour="breadboard"
+          className="flex-1 flex flex-col lg:flex-row min-h-[50vh] lg:min-h-0"
+        >
           {/* Main Canvas Area — infinite-canvas with pan/zoom */}
           <div
             ref={panZoomContainerRef}
@@ -165,107 +176,113 @@ export const Workspace: React.FC = () => {
             onWheel={panZoomHandlers.onWheel}
             onMouseDown={panZoomHandlers.onMouseDown}
           >
-          {/* SVG Canvas — fills container, zoom/pan via native <g> transform for crisp vectors */}
-          <svg
-            ref={svgRef}
-            width="100%"
-            height="100%"
-            onMouseMove={handleMouseMove}
-            onClick={handleSvgClick}
-            className="block"
-            textRendering="geometricPrecision"
-            shapeRendering="geometricPrecision"
-          >
-            {/* Master transform group — all content scales as lossless vectors */}
-            <g
-              transform={`translate(${panZoomState.panX}, ${panZoomState.panY}) scale(${panZoomState.scale})`}
+            {/* SVG Canvas — fills container, zoom/pan via native <g> transform for crisp vectors */}
+            <svg
+              ref={svgRef}
+              width="100%"
+              height="100%"
+              onMouseMove={handleMouseMove}
+              onClick={handleSvgClick}
+              className="block"
+              textRendering="geometricPrecision"
+              shapeRendering="geometricPrecision"
             >
-              <Breadboard />
+              {/* Master transform group — all content scales as lossless vectors */}
+              <g
+                transform={`translate(${panZoomState.panX}, ${panZoomState.panY}) scale(${panZoomState.scale})`}
+              >
+                <Breadboard />
 
-              {/* Layer 2: Components (rendered via registry - no hardcoded type checks) */}
-              <g className="components-layer">
-                {components.map((component) => {
-                  const isSelected = selectedComponentId === component.id;
-                  const isActive = isComponentActive(component.id);
-                  const simulationState = simulation.componentStates.get(
-                    component.id,
-                  );
-                  const isRecentlyPlaced = recentlyPlacedIds.has(component.id);
+                {/* Layer 2: Components (rendered via registry - no hardcoded type checks) */}
+                <g className="components-layer">
+                  {components.map((component) => {
+                    const isSelected = selectedComponentId === component.id;
+                    const isActive = isComponentActive(component.id);
+                    const simulationState = simulation.componentStates.get(
+                      component.id,
+                    );
+                    const isRecentlyPlaced = recentlyPlacedIds.has(
+                      component.id,
+                    );
 
-                  return renderComponent({
-                    component,
-                    nodes,
-                    isSelected,
-                    isActive,
-                    simulationState,
-                    onSelect: () => selectComponent(component.id),
-                    onToggle: () => toggleSwitch(component.id),
-                    isRecentlyPlaced,
-                  });
-                })}
+                    return renderComponent({
+                      component,
+                      nodes,
+                      isSelected,
+                      isActive,
+                      simulationState,
+                      onSelect: () => selectComponent(component.id),
+                      onToggle: () => toggleSwitch(component.id),
+                      onPress: () => setButtonPressed(component.id, true),
+                      onRelease: () => setButtonPressed(component.id, false),
+                      isRecentlyPlaced,
+                    });
+                  })}
+                </g>
+
+                {/* Layer 3: Wires (rendered last = visually on top of components) */}
+                <g className="wires-layer">
+                  {wires.map((wire) => {
+                    const isActive =
+                      activeNodes.has(wire.startNodeId) &&
+                      activeNodes.has(wire.endNodeId);
+                    const isSelected = selectedWireId === wire.id;
+
+                    return (
+                      <Wire
+                        key={wire.id}
+                        wire={wire}
+                        nodes={nodes}
+                        isActive={isActive}
+                        isSelected={isSelected}
+                        selectedTool={selectedTool}
+                        onSelect={selectWire}
+                        onDelete={removeWire}
+                      />
+                    );
+                  })}
+
+                  <IsolatedWirePreview color={selectedColor} />
+                </g>
               </g>
+            </svg>
 
-              {/* Layer 3: Wires (rendered last = visually on top of components) */}
-              <g className="wires-layer">
-                {wires.map((wire) => {
-                  const isActive =
-                    activeNodes.has(wire.startNodeId) &&
-                    activeNodes.has(wire.endNodeId);
-                  const isSelected = selectedWireId === wire.id;
+            {/* Zoom Controls — floating panel bottom-right */}
+            <FloatingPanel position="bottom-right">
+              <IconButton onClick={panZoomActions.zoomOut} title="Zoom Out">
+                −
+              </IconButton>
+              <span className="w-14 text-center text-xs font-mono text-gray-600 tabular-nums">
+                {Math.round(panZoomState.scale * 100)}%
+              </span>
+              <IconButton onClick={panZoomActions.zoomIn} title="Zoom In">
+                +
+              </IconButton>
+              <div className="w-px h-5 bg-gray-300 mx-1" />
+              <button
+                onClick={panZoomActions.resetView}
+                className="px-3 h-10 flex items-center justify-center rounded-md hover:bg-gray-100 active:bg-gray-200 text-gray-600 text-xs font-medium transition-colors cursor-pointer"
+                title="Reset Zoom & Pan"
+              >
+                Reset
+              </button>
+            </FloatingPanel>
 
-                  return (
-                    <Wire
-                      key={wire.id}
-                      wire={wire}
-                      nodes={nodes}
-                      isActive={isActive}
-                      isSelected={isSelected}
-                      selectedTool={selectedTool}
-                      onSelect={selectWire}
-                      onDelete={removeWire}
-                    />
-                  );
-                })}
-
-                <IsolatedWirePreview color={selectedColor} />
-              </g>
-            </g>
-          </svg>
-
-          {/* Zoom Controls — floating panel bottom-right */}
-          <FloatingPanel position="bottom-right">
-            <IconButton onClick={panZoomActions.zoomOut} title="Zoom Out">
-              −
-            </IconButton>
-            <span className="w-14 text-center text-xs font-mono text-gray-600 tabular-nums">
-              {Math.round(panZoomState.scale * 100)}%
-            </span>
-            <IconButton onClick={panZoomActions.zoomIn} title="Zoom In">
-              +
-            </IconButton>
-            <div className="w-px h-5 bg-gray-300 mx-1" />
-            <button
-              onClick={panZoomActions.resetView}
-              className="px-3 h-10 flex items-center justify-center rounded-md hover:bg-gray-100 active:bg-gray-200 text-gray-600 text-xs font-medium transition-colors cursor-pointer"
-              title="Reset Zoom & Pan"
-            >
-              Reset
-            </button>
-          </FloatingPanel>
-
-          {/* Canvas Info Bar — bottom-left */}
-          <FloatingPanel position="bottom-left" className="gap-4 px-3">
-            <span>Components: {components.length}</span>
-            <span>Wires: {wires.length}</span>
-            <div className="w-px h-4 bg-gray-300" />
-            <KbdShortcut shortcut="V" label="Select" />
-            <KbdShortcut shortcut="W" label="Wire" />
-            <KbdShortcut shortcut="D" label="Delete" />
-            <KbdShortcut shortcut="ESC" label="Cancel" />
-            <div className="w-px h-4 bg-gray-300" />
-            <span className="text-gray-400">Scroll: Zoom | Ctrl+Drag: Pan</span>
-          </FloatingPanel>
-        </div>
+            {/* Canvas Info Bar — bottom-left */}
+            <FloatingPanel position="bottom-left" className="gap-4 px-3">
+              <span>Components: {components.length}</span>
+              <span>Wires: {wires.length}</span>
+              <div className="w-px h-4 bg-gray-300" />
+              <KbdShortcut shortcut="V" label="Select" />
+              <KbdShortcut shortcut="W" label="Wire" />
+              <KbdShortcut shortcut="D" label="Delete" />
+              <KbdShortcut shortcut="ESC" label="Cancel" />
+              <div className="w-px h-4 bg-gray-300" />
+              <span className="text-gray-400">
+                Scroll: Zoom | Ctrl+Drag: Pan
+              </span>
+            </FloatingPanel>
+          </div>
         </div>
 
         {/* Right Panel - Info/Properties - Hidden on mobile, shown on desktop */}

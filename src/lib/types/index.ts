@@ -31,8 +31,8 @@ export interface BreadboardNode {
 }
 
 // ---- Electronic Component Types ----
-export type ComponentType = 'battery' | 'led' | 'resistor' | 'wire' | 'switch' | 'capacitor' | 'buzzer' | 'diode' | 'npn_transistor' | 'pnp_transistor' | 'ic_555';
-export type PinType = 'positive' | 'negative' | 'anode' | 'cathode' | 'terminal-1' | 'terminal-2' | 'collector' | 'base' | 'emitter' | 'ic-gnd' | 'ic-trig' | 'ic-out' | 'ic-rst' | 'ic-ctrl' | 'ic-thr' | 'ic-dis' | 'ic-vcc';
+export type ComponentType = 'battery' | 'led' | 'resistor' | 'wire' | 'switch' | 'capacitor' | 'buzzer' | 'diode' | 'npn_transistor' | 'pnp_transistor' | 'ic_555' | 'tactile_button';
+export type PinType = 'positive' | 'negative' | 'anode' | 'cathode' | 'terminal-1' | 'terminal-2' | 'collector' | 'base' | 'emitter' | 'ic-gnd' | 'ic-trig' | 'ic-out' | 'ic-rst' | 'ic-ctrl' | 'ic-thr' | 'ic-dis' | 'ic-vcc' | 'tb-top-left' | 'tb-bottom-left' | 'tb-top-right' | 'tb-bottom-right';
 
 export interface ComponentPin {
   id: string;                      // Format: "{componentId}-{pinType}"
@@ -91,7 +91,11 @@ export interface IC555State {
   clockState: boolean; // Current output level of the oscillator
 }
 
-export type ComponentState = BatteryState | LEDState | ResistorState | SwitchState | CapacitorState | BuzzerState | DiodeState | TransistorState | IC555State | Record<string, unknown>;
+export interface TactileButtonState {
+  isActive: boolean;  // true while held down = left-right pairs connected
+}
+
+export type ComponentState = BatteryState | LEDState | ResistorState | SwitchState | CapacitorState | BuzzerState | DiodeState | TransistorState | IC555State | TactileButtonState | Record<string, unknown>;
 
 // ---- Wire Types ----
 export interface Wire {
@@ -256,5 +260,10 @@ export function asTransistorState(state: ComponentState): TransistorState | null
 
 export function asIC555State(state: ComponentState): IC555State | null {
   if (state && 'isActive' in state && !('frequency' in state) && !('isOn' in state)) return state as IC555State;
+  return null;
+}
+
+export function asTactileButtonState(state: ComponentState): TactileButtonState | null {
+  if (state && 'isActive' in state && !('frequency' in state) && !('clockState' in state) && !('isOn' in state)) return state as TactileButtonState;
   return null;
 }

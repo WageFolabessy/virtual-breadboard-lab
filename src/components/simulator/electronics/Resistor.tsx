@@ -110,17 +110,6 @@ export const Resistor: React.FC<ResistorProps> = React.memo(
             fill={color}
           />
         ))}
-
-        {/* Value label */}
-        <text
-          x={0}
-          y={bodyHeight / 2 + 10}
-          fill="#666"
-          fontSize="8"
-          textAnchor="middle"
-        >
-          {state.resistance}Ω
-        </text>
       </g>
     );
   },
