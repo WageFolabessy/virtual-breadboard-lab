@@ -244,6 +244,10 @@ interface CircuitStoreActions {
   exportCircuit: () => void;
   importCircuit: (jsonString: string) => void;
   
+  // Clipboard Actions
+  copyCircuitToClipboard: () => Promise<boolean>;
+  pasteCircuitFromClipboard: () => Promise<boolean>;
+  
   // History Actions
   undo: () => void;
   redo: () => void;
@@ -1089,6 +1093,51 @@ export const useCircuitStore = create<CircuitStore>()(
           get().runSimulation();
         } catch (e) {
           console.error('[VBL] Failed to import circuit:', e);
+        }
+      },
+      
+      // ---- Clipboard Actions ----
+      copyCircuitToClipboard: async (): Promise<boolean> => {
+        try {
+          const { components, wires } = get();
+          const exportData: SerializedState = {
+            version: 1,
+            components: components.map(serializeComponent),
+            wires: wires.map(w => ({
+              id: w.id,
+              startNodeId: w.startNodeId,
+              endNodeId: w.endNodeId,
+              color: w.color,
+            })),
+          };
+          const json = JSON.stringify(exportData, null, 2);
+          await navigator.clipboard.writeText(json);
+          console.log('[VBL] Circuit copied to clipboard');
+          return true;
+        } catch (e) {
+          console.error('[VBL] Failed to copy circuit to clipboard:', e);
+          return false;
+        }
+      },
+      
+      pasteCircuitFromClipboard: async (): Promise<boolean> => {
+        try {
+          const clipboardText = await navigator.clipboard.readText();
+          const parsed = JSON.parse(clipboardText) as SerializedState;
+          
+          // Validate VBL JSON format
+          if (!parsed.version || !Array.isArray(parsed.components) || !Array.isArray(parsed.wires)) {
+            console.error('[VBL] Invalid VBL JSON format in clipboard');
+            return false;
+          }
+          
+          // Reuse existing importCircuit logic
+          get().importCircuit(clipboardText);
+          console.log('[VBL] Circuit pasted from clipboard');
+          return true;
+        } catch (e) {
+          console.error('[VBL] Failed to paste circuit from clipboard:', e);
+          return false;
         }
       },
     }),

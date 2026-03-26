@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useRef } from "react";
+import React, { useRef, useState, useCallback } from "react";
 import { useCircuitStore } from "@/lib/store/circuit-store";
 import { useShallow } from "zustand/react/shallow";
 import { ActionButton } from "@/components/ui";
@@ -9,19 +9,25 @@ import { ActionButton } from "@/components/ui";
 const ExportIcon = () => <span className="text-base">📤</span>;
 const ImportIcon = () => <span className="text-base">📥</span>;
 const ClearIcon = () => <span className="text-base">🗑️</span>;
+const CopyIcon = () => <span className="text-base">📋</span>;
+const PasteIcon = () => <span className="text-base">📄</span>;
+const CheckIcon = () => <span className="text-base">✓</span>;
 
 import Image from "next/image";
 import logo from "@/app/icon.png";
 
 export const Header: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isCopied, setIsCopied] = useState(false);
 
   // AGENTS.MD COMPLIANCE: Use useShallow for consistency (functions have stable refs, but this maintains pattern consistency)
-  const { exportCircuit, importCircuit, clearAll } = useCircuitStore(
+  const { exportCircuit, importCircuit, clearAll, copyCircuitToClipboard, pasteCircuitFromClipboard } = useCircuitStore(
     useShallow((state) => ({
       exportCircuit: state.exportCircuit,
       importCircuit: state.importCircuit,
       clearAll: state.clearAll,
+      copyCircuitToClipboard: state.copyCircuitToClipboard,
+      pasteCircuitFromClipboard: state.pasteCircuitFromClipboard,
     })),
   );
 
@@ -56,6 +62,24 @@ export const Header: React.FC = () => {
     }
   };
 
+  // ---- Clipboard Handlers with Visual Feedback ----
+  const handleCopyToClipboard = useCallback(async () => {
+    const success = await copyCircuitToClipboard();
+    if (success) {
+      setIsCopied(true);
+      setTimeout(() => setIsCopied(false), 2000);
+    } else {
+      alert("Failed to copy circuit to clipboard.");
+    }
+  }, [copyCircuitToClipboard]);
+
+  const handlePasteFromClipboard = useCallback(async () => {
+    const success = await pasteCircuitFromClipboard();
+    if (!success) {
+      alert("Invalid VBL JSON format. Paste failed.");
+    }
+  }, [pasteCircuitFromClipboard]);
+
   return (
     <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shrink-0">
       <div className="flex items-center gap-3">
@@ -84,6 +108,22 @@ export const Header: React.FC = () => {
 
       {/* Action Buttons - Using extracted ActionButton component */}
       <div className="flex items-center gap-2">
+        {/* Clipboard Actions */}
+        <ActionButton
+          icon={isCopied ? <CheckIcon /> : <CopyIcon />}
+          label={isCopied ? "Copied!" : "Copy JSON"}
+          onClick={handleCopyToClipboard}
+          title="Copy circuit to clipboard (Ctrl+C)"
+          className={isCopied ? "text-green-600" : ""}
+        />
+        <ActionButton
+          icon={<PasteIcon />}
+          label="Paste JSON"
+          onClick={handlePasteFromClipboard}
+          title="Paste circuit from clipboard (Ctrl+V)"
+        />
+        <div className="w-px h-6 bg-gray-300 mx-1" />
+        {/* File-based Actions */}
         <ActionButton
           icon={<ExportIcon />}
           label="Export"

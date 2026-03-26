@@ -14,6 +14,11 @@ import { SHORTCUTS } from "@/lib/constants";
  * - D: Delete tool
  * - Escape: Clear all selections, cancel wire/placement, return to select tool
  * - Delete/Backspace: Delete currently selected component or wire
+ * - Ctrl/Cmd+C: Copy circuit to clipboard
+ * - Ctrl/Cmd+V: Paste circuit from clipboard
+ * - Ctrl/Cmd+Z: Undo
+ * - Ctrl/Cmd+Y: Redo
+ * - Ctrl/Cmd+S: Export circuit
  */
 export function useKeyboardShortcuts() {
   const setSelectedTool = useCallback(
@@ -24,7 +29,7 @@ export function useKeyboardShortcuts() {
   );
 
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const handleKeyDown = async (e: KeyboardEvent) => {
       // Ignore if typing in input/textarea
       if (
         e.target instanceof HTMLInputElement ||
@@ -35,21 +40,45 @@ export function useKeyboardShortcuts() {
 
       // Handle keys (case-insensitive)
       const key = e.key.toLowerCase();
+      const isModifierPressed = e.ctrlKey || e.metaKey;
 
-      // Tool shortcuts
-      if (key === SHORTCUTS.SELECT_TOOL.toLowerCase()) {
+      // ---- Clipboard Shortcuts (Ctrl/Cmd+C and Ctrl/Cmd+V) ----
+      // These MUST be checked before tool shortcuts to avoid conflicts
+      
+      // Copy circuit to clipboard (Ctrl/Cmd+C)
+      if (key === SHORTCUTS.COPY.toLowerCase() && isModifierPressed) {
+        e.preventDefault();
+        const success = await useCircuitStore.getState().copyCircuitToClipboard();
+        if (!success) {
+          alert("Failed to copy circuit to clipboard.");
+        }
+        return;
+      }
+      
+      // Paste circuit from clipboard (Ctrl/Cmd+V)
+      if (key === SHORTCUTS.PASTE.toLowerCase() && isModifierPressed) {
+        e.preventDefault();
+        const success = await useCircuitStore.getState().pasteCircuitFromClipboard();
+        if (!success) {
+          alert("Invalid VBL JSON format. Paste failed.");
+        }
+        return;
+      }
+
+      // ---- Tool shortcuts (no modifier key) ----
+      if (key === SHORTCUTS.SELECT_TOOL.toLowerCase() && !isModifierPressed) {
         e.preventDefault();
         setSelectedTool("select");
         return;
       }
 
-      if (key === SHORTCUTS.WIRE_TOOL.toLowerCase()) {
+      if (key === SHORTCUTS.WIRE_TOOL.toLowerCase() && !isModifierPressed) {
         e.preventDefault();
         setSelectedTool("wire");
         return;
       }
 
-      if (key === SHORTCUTS.DELETE_TOOL.toLowerCase()) {
+      if (key === SHORTCUTS.DELETE_TOOL.toLowerCase() && !isModifierPressed) {
         e.preventDefault();
         setSelectedTool("delete");
         return;
@@ -82,30 +111,24 @@ export function useKeyboardShortcuts() {
         return;
       }
 
-      // Undo (Ctrl/Cmd+Z or just Z)
-      if (key === SHORTCUTS.UNDO.toLowerCase()) {
-        if (e.ctrlKey || e.metaKey) {
-          e.preventDefault();
-          useCircuitStore.getState().undo();
-        }
+      // Undo (Ctrl/Cmd+Z)
+      if (key === SHORTCUTS.UNDO.toLowerCase() && isModifierPressed) {
+        e.preventDefault();
+        useCircuitStore.getState().undo();
         return;
       }
 
-      // Redo (Ctrl/Cmd+Y or just Y)
-      if (key === SHORTCUTS.REDO.toLowerCase()) {
-        if (e.ctrlKey || e.metaKey) {
-          e.preventDefault();
-          useCircuitStore.getState().redo();
-        }
+      // Redo (Ctrl/Cmd+Y)
+      if (key === SHORTCUTS.REDO.toLowerCase() && isModifierPressed) {
+        e.preventDefault();
+        useCircuitStore.getState().redo();
         return;
       }
 
       // Save/Export (Ctrl/Cmd+S)
-      if (key === SHORTCUTS.SAVE.toLowerCase()) {
-        if (e.ctrlKey || e.metaKey) {
-          e.preventDefault();
-          useCircuitStore.getState().exportCircuit();
-        }
+      if (key === SHORTCUTS.SAVE.toLowerCase() && isModifierPressed) {
+        e.preventDefault();
+        useCircuitStore.getState().exportCircuit();
         return;
       }
 

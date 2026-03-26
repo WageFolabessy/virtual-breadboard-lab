@@ -307,4 +307,6 @@ export const SHORTCUTS = {
   REDO: 'y',
   SAVE: 's',
   CLEAR: 'Delete',
+  COPY: 'c',
+  PASTE: 'v',
 } as const;

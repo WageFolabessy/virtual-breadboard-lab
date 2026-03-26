@@ -105,29 +105,12 @@ const DeleteIcon = () => (
   </svg>
 );
 
-const ClearIcon = () => (
-  <svg
-    className="w-5 h-5"
-    fill="none"
-    viewBox="0 0 24 24"
-    stroke="currentColor"
-  >
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={2}
-      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-    />
-  </svg>
-);
-
 export const Toolbar: React.FC = () => {
-  const { selectedTool, setSelectedTool, clearAll, simulation } =
+  const { selectedTool, setSelectedTool, simulation } =
     useCircuitStore(
       useShallow((state) => ({
         selectedTool: state.selectedTool,
         setSelectedTool: state.setSelectedTool,
-        clearAll: state.clearAll,
         simulation: state.simulation,
       })),
     );
@@ -166,19 +149,9 @@ export const Toolbar: React.FC = () => {
           />
         </div>
 
-        {/* Center - Circuit Status */}
+        {/* Right side - Circuit Status */}
         <div className="flex items-center gap-3">
           <StatusBadge status={simulation.status} />
-        </div>
-
-        {/* Right side - Actions */}
-        <div className="flex items-center gap-2">
-          <ActionButton
-            icon={<ClearIcon />}
-            label="Clear All"
-            onClick={clearAll}
-            variant="danger"
-          />
         </div>
       </div>
     </div>
