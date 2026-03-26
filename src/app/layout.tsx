@@ -74,7 +74,7 @@ export const metadata: Metadata = {
       "Free interactive breadboard simulator. Design, test, and learn electronic circuits, logic gates, and 555 Timer ICs directly in your browser. No installation required. / Simulator elektronika online gratis dari Cangkir.",
     images: [
       {
-        url: "/og-image.jpg",
+        url: "/og.png",
         width: 1200,
         height: 630,
         alt: "Virtual Breadboard Lab - Online Circuit Simulator Logo",
@@ -87,7 +87,7 @@ export const metadata: Metadata = {
       "Virtual Breadboard Lab - Free Online Circuit Simulator | Simulator Elektronika Gratis",
     description:
       "Design, test, and learn electronic circuits directly in your browser. No installation required. / Simulator elektronika online gratis dari Cangkir.",
-    images: ["/og-image.jpg"],
+    images: ["/og.png"],
     creator: "@cangkir_tech",
     site: "@cangkir_tech",
   },
