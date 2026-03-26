@@ -179,7 +179,6 @@ const COMPONENT_RENDERERS: Partial<Record<ComponentType, ComponentRenderer>> = {
     component,
     nodes,
     isSelected,
-    isActive,
     onSelect,
     onPress,
     onRelease,
@@ -191,7 +190,7 @@ const COMPONENT_RENDERERS: Partial<Record<ComponentType, ComponentRenderer>> = {
         component={component}
         nodes={nodes}
         isSelected={isSelected}
-        isActive={isActive && (btnState?.isActive ?? false)}
+        isActive={btnState?.isActive ?? false}
         onPress={onPress ?? (() => {})}
         onRelease={onRelease ?? (() => {})}
         onClick={onSelect}

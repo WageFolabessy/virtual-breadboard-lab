@@ -604,98 +604,7 @@ export const useCircuitStore = create<CircuitStore>()(
           get().runSimulation();
           return;
         }
-        
-        // ---- 4-PIN TRENCH-STRADDLING PLACEMENT (Tactile Button) ----
-        // 4-pin components straddle the center trench (Row E ↔ Row F).
-        // Pin layout: 2 columns × 2 rows
-        //   tb-top-left  (clickedRow, col)    |  tb-top-right  (clickedRow, col+1)
-        //   tb-bottom-left (oppositeRow, col) |  tb-bottom-right (oppositeRow, col+1)
-        if (definition.pinCount === 4) {
-          const parts = node.id.split('-');
-          const rootRow = parts[0];
-          const rootCol = parseInt(parts[1], 10);
-          
-          // Enforce placement only on trench-edge rows (E or F)
-          const TRENCH_MAP: Record<string, string> = { 'E': 'F', 'F': 'E' };
-          const oppositeRow = TRENCH_MAP[rootRow];
-          if (!oppositeRow) {
-            alert('Tactile button must be placed on Row E or Row F to straddle the center trench.');
-            return;
-          }
-          
-          // Pin node mapping: [top-left, bottom-left, top-right, bottom-right]
-          const pinNodeIds: string[] = [];
-          const targetIds = [
-            `${rootRow}-${rootCol}`,        // tb-top-left
-            `${oppositeRow}-${rootCol}`,     // tb-bottom-left
-            `${rootRow}-${rootCol + 1}`,     // tb-top-right
-            `${oppositeRow}-${rootCol + 1}`, // tb-bottom-right
-          ];
-          
-          for (const targetId of targetIds) {
-            const targetNode = state.nodes.get(targetId);
-            if (!targetNode || targetNode.isOccupied) {
-              console.warn(`[VBL] Tactile button placement blocked: node ${targetId} ${!targetNode ? 'does not exist' : 'is occupied'}`);
-              return;
-            }
-            pinNodeIds.push(targetId);
-          }
-          
-          // All 4 nodes validated — place the component
-          get().saveSnapshot();
-          const componentId = generateId();
-          const pins = createComponentPins(state.placementComponent, componentId);
-          
-          pins.forEach((pin, index) => {
-            pin.connectedNodeId = pinNodeIds[index];
-          });
-          
-          // Canvas position: center of the 4-pin footprint
-          const topLeft = state.nodes.get(pinNodeIds[0])!;
-          const bottomRight = state.nodes.get(pinNodeIds[3])!;
-          const canvasPosition = {
-            x: (topLeft.canvasPosition.x + bottomRight.canvasPosition.x) / 2,
-            y: (topLeft.canvasPosition.y + bottomRight.canvasPosition.y) / 2,
-          };
-          
-          const componentState = getDefaultComponentState(state.placementComponent);
-          
-          const newComponent: CircuitComponent = {
-            id: componentId,
-            type: state.placementComponent,
-            pins,
-            canvasPosition,
-            rotation: 0,
-            state: componentState,
-          };
-          
-          const updatedNodes = new Map(state.nodes);
-          pinNodeIds.forEach((pinNodeId) => {
-            const n = updatedNodes.get(pinNodeId);
-            if (n) {
-              updatedNodes.set(pinNodeId, {
-                ...n,
-                isOccupied: true,
-                occupiedBy: componentId,
-              });
-            }
-          });
-          
-          set({
-            components: [...state.components, newComponent],
-            nodes: updatedNodes,
-            placementComponent: null,
-            placementPins: [],
-            selectedTool: 'select',
-          });
-          
-          // Sound feedback + animation
-          globalSoundSystem.playSnap();
-          markAsRecentlyPlaced(componentId, state.recentlyPlacedIds, set);
-          
-          get().runSimulation();
-          return;
-        }
+
         
         // ---- DIP-8 AUTO-PLACEMENT (ICs like 555 Timer) ----
         // DIP-8 must straddle the center trench (Row E ↔ Row F).
@@ -800,24 +709,65 @@ export const useCircuitStore = create<CircuitStore>()(
           return;
         }
         
-        // ---- STANDARD 2-PIN PLACEMENT ----
+        // ---- STANDARD MULTI-CLICK PLACEMENT ----
         const newPins = [...state.placementPins, nodeId];
         
-        // Check if we have all pins placed
-        if (newPins.length >= definition.pinCount) {
+        // Basic components take N clicks (where N = pinCount).
+        // Tactile button mathematically infers 2 pins from 2 clicks despite pinCount=4.
+        const clicksNeeded = state.placementComponent === 'tactile_button' ? 2 : definition.pinCount;
+        
+        // Check if we have all clicks placed
+        if (newPins.length >= clicksNeeded) {
           get().saveSnapshot();
+          
+          let pinNodeIds = [...newPins];
+          
+          // ---- TACTILE BUTTON DYNAMIC PLACEMENT ----
+          if (state.placementComponent === 'tactile_button') {
+            const [node1, node2] = newPins;
+            const [row1Str, col1Str] = node1.split('-');
+            const [row2Str, col2Str] = node2.split('-');
+            
+            // Infer bottom rows (shift char code down by 1)
+            const bottomRow1 = String.fromCharCode(row1Str.charCodeAt(0) + 1);
+            const bottomRow2 = String.fromCharCode(row2Str.charCodeAt(0) + 1);
+            
+            const node3 = `${bottomRow1}-${col1Str}`;
+            const node4 = `${bottomRow2}-${col2Str}`;
+            
+            // Pin mapping: tb-top-left, tb-bottom-left, tb-top-right, tb-bottom-right
+            // Matches sequence in createComponentPins
+            pinNodeIds = [node1, node3, node2, node4];
+            
+            // Validate all 4 nodes
+            for (const targetId of pinNodeIds) {
+              const targetNode = state.nodes.get(targetId);
+              if (!targetNode || targetNode.isOccupied) {
+                console.warn(`[VBL] Tactile button placement blocked: node ${targetId} ${!targetNode ? 'does not exist' : 'is occupied'}`);
+                set({ placementPins: [] }); // Reset clicks if blocked
+                // Revert snapshot because we aborted component creation
+                const prevState = get().history.past.pop();
+                if (prevState) {
+                  set((s) => ({ ...s, ...prevState }));
+                }
+                alert('Invalid placement. All 4 pins must fit on empty breadboard nodes.');
+                return;
+              }
+            }
+          }
+          
           // Create the component
           const componentId = generateId();
           const pins = createComponentPins(state.placementComponent, componentId);
           
           // Connect pins to nodes
           pins.forEach((pin, index) => {
-            pin.connectedNodeId = newPins[index];
+            pin.connectedNodeId = pinNodeIds[index];
           });
           
-          // Calculate canvas position (center of the component)
-          const firstNode = state.nodes.get(newPins[0])!;
-          const lastNode = state.nodes.get(newPins[newPins.length - 1])!;
+          // Calculate canvas position (center of the component based on all pins)
+          const firstNode = state.nodes.get(pinNodeIds[0])!;
+          const lastNode = state.nodes.get(pinNodeIds[pinNodeIds.length - 1])!;
           const canvasPosition = {
             x: (firstNode.canvasPosition.x + lastNode.canvasPosition.x) / 2,
             y: (firstNode.canvasPosition.y + lastNode.canvasPosition.y) / 2,
@@ -843,7 +793,7 @@ export const useCircuitStore = create<CircuitStore>()(
           
           // Mark nodes as occupied
           const updatedNodes = new Map(state.nodes);
-          newPins.forEach((pinNodeId) => {
+          pinNodeIds.forEach((pinNodeId) => {
             const n = updatedNodes.get(pinNodeId);
             if (n) {
               updatedNodes.set(pinNodeId, {

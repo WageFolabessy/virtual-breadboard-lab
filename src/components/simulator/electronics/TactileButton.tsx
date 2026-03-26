@@ -165,15 +165,17 @@ export const TactileButton: React.FC<TactileButtonProps> = React.memo(
           cx={centerX}
           cy={centerY}
           r={btnRadius}
-          fill={isActive ? "#22C55E" : "#555"}
-          stroke={isActive ? "#16A34A" : "#333"}
+          fill={isActive ? "#22C55E" : "#EF4444"}
+          stroke={isActive ? "#16A34A" : "#B91C1C"}
           strokeWidth={1.5}
           onMouseDown={handlePress}
           onMouseUp={handleRelease}
           onMouseLeave={handleRelease}
           style={{
             transition: "fill 0.1s ease, transform 0.05s ease",
-            filter: isActive ? "brightness(1.2)" : "none",
+            filter: isActive
+              ? "brightness(1.2)"
+              : "shadow(0px 2px 4px rgba(0,0,0,0.5))",
           }}
         />
 
@@ -183,7 +185,7 @@ export const TactileButton: React.FC<TactileButtonProps> = React.memo(
           cy={centerY}
           r={btnRadius * 0.5}
           fill="none"
-          stroke={isActive ? "#16A34A" : "#444"}
+          stroke={isActive ? "#16A34A" : "#991B1B"}
           strokeWidth={0.8}
           style={{ pointerEvents: "none" }}
         />
