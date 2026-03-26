@@ -19,6 +19,7 @@ import {
 import { createBreadboardNodes } from '../engine/breadboard-factory';
 import { evaluateCircuit, getActiveNodes } from '../engine/circuit-evaluator';
 import { COLORS, STORAGE_KEYS, COMPONENT_DEFINITIONS } from '../constants';
+import { globalSoundSystem } from '@/hooks/useUISounds';
 
 interface SerializedWire {
   id: string;
@@ -198,6 +199,12 @@ interface CircuitStoreState {
   placementComponent: ComponentType | null;
   placementPins: string[]; // Node IDs for each pin during placement
   
+  // Animation state (for pop-in effect)
+  recentlyPlacedIds: Set<string>; // Component IDs placed in last 300ms
+  
+  // Onboarding tour state
+  isTourRunning: boolean;
+  
   // History for Undo/Redo
   history: {
     past: { components: CircuitComponent[]; wires: Wire[] }[];
@@ -253,6 +260,10 @@ interface CircuitStoreActions {
   redo: () => void;
   saveSnapshot: () => void;
   
+  // Onboarding Tour Actions
+  startTour: () => void;
+  stopTour: () => void;
+  
   // Initialize
   initialize: () => void;
 }
@@ -288,6 +299,25 @@ function getDefaultComponentState(type: ComponentType): BatteryState | LEDState 
   return {};
 }
 
+/**
+ * Mark a component as recently placed for animation purposes.
+ * Automatically removes it from the set after 300ms.
+ */
+function markAsRecentlyPlaced(componentId: string, recentlyPlacedIds: Set<string>, setState: (fn: (state: CircuitStoreState) => Partial<CircuitStoreState>) => void): void {
+  const newSet = new Set(recentlyPlacedIds);
+  newSet.add(componentId);
+  setState(() => ({ recentlyPlacedIds: newSet }));
+  
+  // Auto-expire after 300ms
+  setTimeout(() => {
+    setState((state) => {
+      const updatedSet = new Set(state.recentlyPlacedIds);
+      updatedSet.delete(componentId);
+      return { recentlyPlacedIds: updatedSet };
+    });
+  }, 300);
+}
+
 // ---- Initial State ----
 const initialNodes = createBreadboardNodes();
 
@@ -315,6 +345,8 @@ const initialState: CircuitStoreState = {
   negativeNodes: new Set(),
   placementComponent: null,
   placementPins: [],
+  recentlyPlacedIds: new Set(),
+  isTourRunning: false,
   history: { past: [], future: [] },
 };
 
@@ -446,6 +478,9 @@ export const useCircuitStore = create<CircuitStore>()(
           wireStartNodeId: null,
         });
         
+        // Sound feedback
+        globalSoundSystem.playClick();
+        
         // Run simulation ONLY after wire is finalized (not during drag)
         get().runSimulation();
       },
@@ -464,6 +499,8 @@ export const useCircuitStore = create<CircuitStore>()(
           // Clear selection if this wire was selected
           selectedWireId: state.selectedWireId === wireId ? null : state.selectedWireId,
         }));
+        // Sound feedback
+        globalSoundSystem.playDelete();
         get().runSimulation();
       },
       
@@ -558,6 +595,10 @@ export const useCircuitStore = create<CircuitStore>()(
             placementPins: [],
             selectedTool: 'select',
           });
+          
+          // Sound feedback + animation
+          globalSoundSystem.playSnap();
+          markAsRecentlyPlaced(componentId, state.recentlyPlacedIds, set);
           
           get().runSimulation();
           return;
@@ -658,6 +699,10 @@ export const useCircuitStore = create<CircuitStore>()(
             selectedTool: 'select',
           });
           
+          // Sound feedback + animation
+          globalSoundSystem.playSnap();
+          markAsRecentlyPlaced(componentId, state.recentlyPlacedIds, set);
+          
           get().runSimulation();
           return;
         }
@@ -724,6 +769,10 @@ export const useCircuitStore = create<CircuitStore>()(
             selectedTool: 'select',
           });
           
+          // Sound feedback + animation
+          globalSoundSystem.playSnap();
+          markAsRecentlyPlaced(componentId, state.recentlyPlacedIds, set);
+          
           // Run simulation after placing component
           get().runSimulation();
         } else {
@@ -769,6 +818,9 @@ export const useCircuitStore = create<CircuitStore>()(
           selectedComponentId:
             state.selectedComponentId === componentId ? null : state.selectedComponentId,
         });
+        
+        // Sound feedback
+        globalSoundSystem.playDelete();
         
         get().runSimulation();
       },
@@ -1015,6 +1067,15 @@ export const useCircuitStore = create<CircuitStore>()(
           set({ nodes: createBreadboardNodes() });
         }
         // Note: If nodes exist (from hydration), do nothing - hydration is the source of truth
+      },
+      
+      // ---- Onboarding Tour Actions ----
+      startTour: () => {
+        set({ isTourRunning: true });
+      },
+      
+      stopTour: () => {
+        set({ isTourRunning: false });
       },
       
       // ---- Export / Import ----

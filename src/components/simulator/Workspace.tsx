@@ -40,6 +40,7 @@ import {
 import { useCanvasInteraction } from "@/hooks/useCanvasInteraction";
 import { usePanZoom } from "@/hooks/usePanZoom";
 import { useSimulationTicker } from "@/hooks/useSimulationTicker";
+import { OnboardingTour } from "@/components/OnboardingTour";
 
 // ---- Isolated Wire Preview Component ----
 // Uses useSyncExternalStore to subscribe to ref-based state without triggering parent re-renders
@@ -75,13 +76,14 @@ IsolatedWirePreview.displayName = "IsolatedWirePreview";
 export const Workspace: React.FC = () => {
   // ---- State subscriptions ----
   // Bundle reference-type selectors (Map/Array/Set) with useShallow
-  const { nodes, components, wires, simulation, activeNodes } = useCircuitStore(
+  const { nodes, components, wires, simulation, activeNodes, recentlyPlacedIds } = useCircuitStore(
     useShallow((state) => ({
       nodes: state.nodes,
       components: state.components,
       wires: state.wires,
       simulation: state.simulation,
       activeNodes: state.activeNodes,
+      recentlyPlacedIds: state.recentlyPlacedIds,
     })),
   );
   // Primitive selectors use strict equality — no useShallow needed
@@ -146,20 +148,23 @@ export const Workspace: React.FC = () => {
     <div className="h-screen flex flex-col bg-gray-100">
       <Header />
       <Toolbar />
+      <OnboardingTour />
 
       {/* Main Content Area - Mobile: stacked, Desktop: 3-column */}
       <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* Left Sidebar */}
         <ComponentLibrary />
 
-        {/* Main Canvas Area — infinite-canvas with pan/zoom */}
-        <div
-          ref={panZoomContainerRef}
-          className="flex-1 relative overflow-hidden bg-gray-200 min-h-[50vh] lg:min-h-0"
-          style={{ cursor: isPanning ? "grabbing" : "crosshair" }}
-          onWheel={panZoomHandlers.onWheel}
-          onMouseDown={panZoomHandlers.onMouseDown}
-        >
+        {/* Tour target wrapper - NO overflow:hidden to prevent Joyride clipping */}
+        <div data-tour="breadboard" className="flex-1 flex flex-col lg:flex-row min-h-[50vh] lg:min-h-0">
+          {/* Main Canvas Area — infinite-canvas with pan/zoom */}
+          <div
+            ref={panZoomContainerRef}
+            className="flex-1 relative overflow-hidden bg-gray-200"
+            style={{ cursor: isPanning ? "grabbing" : "crosshair" }}
+            onWheel={panZoomHandlers.onWheel}
+            onMouseDown={panZoomHandlers.onMouseDown}
+          >
           {/* SVG Canvas — fills container, zoom/pan via native <g> transform for crisp vectors */}
           <svg
             ref={svgRef}
@@ -185,6 +190,7 @@ export const Workspace: React.FC = () => {
                   const simulationState = simulation.componentStates.get(
                     component.id,
                   );
+                  const isRecentlyPlaced = recentlyPlacedIds.has(component.id);
 
                   return renderComponent({
                     component,
@@ -194,6 +200,7 @@ export const Workspace: React.FC = () => {
                     simulationState,
                     onSelect: () => selectComponent(component.id),
                     onToggle: () => toggleSwitch(component.id),
+                    isRecentlyPlaced,
                   });
                 })}
               </g>
@@ -259,9 +266,13 @@ export const Workspace: React.FC = () => {
             <span className="text-gray-400">Scroll: Zoom | Ctrl+Drag: Pan</span>
           </FloatingPanel>
         </div>
+        </div>
 
         {/* Right Panel - Info/Properties - Hidden on mobile, shown on desktop */}
-        <div className="hidden lg:block w-64 bg-gray-50 border-l border-gray-200 p-4 overflow-y-auto">
+        <div
+          className="hidden lg:block w-64 bg-gray-50 border-l border-gray-200 p-4 overflow-y-auto"
+          data-tour="circuit-info"
+        >
           <h2 className="text-lg font-bold text-gray-800 mb-4">Circuit Info</h2>
 
           <StatusIndicator

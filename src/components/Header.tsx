@@ -4,6 +4,7 @@ import React, { useRef, useState, useCallback } from "react";
 import { useCircuitStore } from "@/lib/store/circuit-store";
 import { useShallow } from "zustand/react/shallow";
 import { ActionButton } from "@/components/ui";
+import { STORAGE_KEYS } from "@/lib/constants";
 
 // ---- Icons for Header Actions ----
 const ExportIcon = () => <span className="text-base">📤</span>;
@@ -12,6 +13,7 @@ const ClearIcon = () => <span className="text-base">🗑️</span>;
 const CopyIcon = () => <span className="text-base">📋</span>;
 const PasteIcon = () => <span className="text-base">📄</span>;
 const CheckIcon = () => <span className="text-base">✓</span>;
+const HelpIcon = () => <span className="text-base">❓</span>;
 
 import Image from "next/image";
 import logo from "@/app/icon.png";
@@ -30,6 +32,18 @@ export const Header: React.FC = () => {
       pasteCircuitFromClipboard: state.pasteCircuitFromClipboard,
     })),
   );
+
+  // Help button handler: Reset localStorage flag and trigger tour via store
+  const handleHelpClick = useCallback(() => {
+    // Reset the "seen" flag so tour shows all steps
+    try {
+      localStorage.removeItem(STORAGE_KEYS.ONBOARDING_SEEN);
+    } catch (e) {
+      console.warn("[VBL] Failed to reset onboarding state:", e);
+    }
+    // Trigger tour via stable store action reference
+    useCircuitStore.getState().startTour();
+  }, []);
 
   const handleImportClick = () => {
     fileInputRef.current?.click();
@@ -135,6 +149,13 @@ export const Header: React.FC = () => {
           label="Import"
           onClick={handleImportClick}
           title="Import circuit from JSON file"
+        />
+        <div className="w-px h-6 bg-gray-300 mx-1" />
+        <ActionButton
+          icon={<HelpIcon />}
+          label="Help"
+          onClick={handleHelpClick}
+          title="Restart onboarding tour"
         />
         <div className="w-px h-6 bg-gray-300 mx-1" />
         <ActionButton

@@ -10,7 +10,7 @@ import { useCircuitStore } from "@/lib/store/circuit-store";
 import { useShallow } from "zustand/react/shallow";
 import { ToolType } from "@/lib/types";
 import { SHORTCUTS } from "@/lib/constants";
-import { StatusBadge, ActionButton } from "@/components/ui";
+import { StatusBadge } from "@/components/ui";
 import { useKeyboardShortcuts } from "@/hooks/useKeyboardShortcuts";
 
 interface ToolButtonProps {
@@ -20,6 +20,7 @@ interface ToolButtonProps {
   shortcut: string;
   isActive: boolean;
   onClick: () => void;
+  "data-tour"?: string;
 }
 
 const ToolButton: React.FC<ToolButtonProps> = ({
@@ -28,11 +29,13 @@ const ToolButton: React.FC<ToolButtonProps> = ({
   shortcut,
   isActive,
   onClick,
+  "data-tour": dataTour,
 }) => {
   return (
     <button
       onClick={onClick}
       title={`${label} (${shortcut.toUpperCase()})`}
+      data-tour={dataTour}
       className={`
         flex items-center gap-2 px-4 py-2 rounded-lg transition-all duration-150 cursor-pointer
         ${
@@ -138,6 +141,7 @@ export const Toolbar: React.FC = () => {
             shortcut={SHORTCUTS.WIRE_TOOL}
             isActive={selectedTool === "wire"}
             onClick={() => setSelectedTool("wire")}
+            data-tour="wire-tool"
           />
           <ToolButton
             tool="delete"

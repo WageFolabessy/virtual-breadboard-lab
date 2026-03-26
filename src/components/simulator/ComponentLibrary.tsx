@@ -115,7 +115,10 @@ export const ComponentLibrary: React.FC = () => {
   }, []);
 
   return (
-    <div className="w-full lg:w-64 bg-gray-50 border-b lg:border-b-0 lg:border-r border-gray-200 flex flex-col max-h-48 lg:max-h-full lg:h-full overflow-hidden">
+    <div
+      className="w-full lg:w-64 bg-gray-50 border-b lg:border-b-0 lg:border-r border-gray-200 flex flex-col max-h-48 lg:max-h-full lg:h-full overflow-hidden"
+      data-tour="component-library"
+    >
       {/* Header */}
       <div className="p-4 border-b border-gray-200 bg-white">
         <h2 className="text-lg font-bold text-gray-800">Components</h2>

@@ -52,6 +52,25 @@ body {
   animation: pulse-glow 1.5s ease-in-out infinite;
 }
 
+/* Component drop animation */
+@keyframes pop-in {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-pop-in {
+  animation: pop-in 200ms ease-out forwards;
+}
+
 /* Breadboard node hover effect */
 .breadboard-svg circle {
   transition: r 0.1s ease, fill 0.15s ease;

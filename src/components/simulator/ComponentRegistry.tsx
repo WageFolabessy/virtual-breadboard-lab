@@ -42,6 +42,7 @@ export interface ComponentRendererProps {
   simulationState?: ComponentState;
   onSelect: () => void;
   onToggle?: () => void;
+  isRecentlyPlaced?: boolean;
 }
 
 // ---- Component Renderer Type ----
@@ -174,7 +175,7 @@ const COMPONENT_RENDERERS: Partial<Record<ComponentType, ComponentRenderer>> = {
 // ---- Render Component Function ----
 // Universal render function that uses the registry
 export function renderComponent(props: ComponentRendererProps): React.ReactNode {
-  const { component } = props;
+  const { component, isRecentlyPlaced } = props;
   const renderer = COMPONENT_RENDERERS[component.type];
   
   if (!renderer) {
@@ -187,7 +188,18 @@ export function renderComponent(props: ComponentRendererProps): React.ReactNode 
     return null;
   }
   
-  return renderer(props);
+  const renderedComponent = renderer(props);
+  
+  // Wrap with animation group if recently placed
+  if (isRecentlyPlaced) {
+    return (
+      <g key={component.id} className="animate-pop-in">
+        {renderedComponent}
+      </g>
+    );
+  }
+  
+  return renderedComponent;
 }
 
 // ---- Helper to check if a component type has a renderer ----

@@ -295,6 +295,7 @@ export const STORAGE_KEYS = {
   SAVED_CIRCUITS: 'breadboard-simulator-circuits',
   CURRENT_CIRCUIT: 'breadboard-simulator-current',
   PREFERENCES: 'breadboard-simulator-prefs',
+  ONBOARDING_SEEN: 'breadboard-simulator-onboarding-seen',
 } as const;
 
 // ---- Keyboard Shortcuts ----
