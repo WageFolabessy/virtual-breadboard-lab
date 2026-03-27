@@ -40,7 +40,8 @@ body {
 
 /* SVG animation for active circuits */
 @keyframes pulse-glow {
-  0%, 100% {
+  0%,
+  100% {
     filter: drop-shadow(0 0 2px rgba(34, 197, 94, 0.5));
   }
   50% {
@@ -73,7 +74,9 @@ body {
 
 /* Breadboard node hover effect */
 .breadboard-svg circle {
-  transition: r 0.1s ease, fill 0.15s ease;
+  transition:
+    r 0.1s ease,
+    fill 0.15s ease;
 }
 
 /* Wire hover effect */
@@ -90,4 +93,20 @@ button:focus-visible {
 /* Selection styles */
 ::selection {
   background-color: rgba(59, 130, 246, 0.3);
+}
+
+/* Toast notification animation */
+@keyframes slide-in-up {
+  0% {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in-up {
+  animation: slide-in-up 300ms ease-out forwards;
 }

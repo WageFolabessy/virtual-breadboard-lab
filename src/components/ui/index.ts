@@ -13,3 +13,4 @@ export type { IconButtonSize } from './IconButton';
 export { FloatingPanel } from './FloatingPanel';
 export type { FloatingPanelPosition } from './FloatingPanel';
 export { SectionHeader } from './SectionHeader';
+export { Toast } from './Toast';

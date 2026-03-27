@@ -185,6 +185,7 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
     isConductive: true,
     isPowerSource: false,
     category: 'passive',
+    isCurrentLimiting: true, // Downgrades strong current → weak in flood-fill
   },
   switch: {
     type: 'switch',

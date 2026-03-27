@@ -24,14 +24,26 @@ interface WireProps {
   wire: WireType;
   nodes: Map<string, BreadboardNode>;
   isActive: boolean;
-  isSelected: boolean; // NEW: Is this wire currently selected?
-  selectedTool: ToolType; // NEW: Current tool (select vs delete)
-  onSelect: (wireId: string) => void; // NEW: Select wire callback
+  isSelected: boolean;
+  isMoving: boolean; // True when this wire's endpoint is being dragged
+  selectedTool: ToolType;
+  onSelect: (wireId: string) => void;
   onDelete: (wireId: string) => void;
+  onStartMoveEndpoint: (wireId: string, endpoint: "start" | "end") => void;
 }
 
 export const Wire: React.FC<WireProps> = React.memo(
-  ({ wire, nodes, isActive, isSelected, selectedTool, onSelect, onDelete }) => {
+  ({
+    wire,
+    nodes,
+    isActive,
+    isSelected,
+    isMoving,
+    selectedTool,
+    onSelect,
+    onDelete,
+    onStartMoveEndpoint,
+  }) => {
     const startNode = nodes.get(wire.startNodeId);
     const endNode = nodes.get(wire.endNodeId);
 
@@ -81,8 +93,8 @@ export const Wire: React.FC<WireProps> = React.memo(
       }
     };
 
-    // Wire opacity: 0.7 default, 1.0 when selected or hovered (CSS handles hover)
-    const wireOpacity = isSelected ? 1.0 : 0.7;
+    // Wire opacity: hidden when being moved, 0.7 default, 1.0 when selected
+    const wireOpacity = isMoving ? 0.15 : isSelected ? 1.0 : 0.7;
 
     return (
       <g
@@ -163,6 +175,34 @@ export const Wire: React.FC<WireProps> = React.memo(
         {/* Wire endpoints — ALWAYS use wire's color, larger when selected */}
         <circle cx={x1} cy={y1} r={isSelected ? 4 : 3} fill={wireColor} />
         <circle cx={x2} cy={y2} r={isSelected ? 4 : 3} fill={wireColor} />
+
+        {/* Drag handles for endpoint relocation (only in select tool, invisible larger hit area) */}
+        {selectedTool === "select" && !isMoving && (
+          <>
+            <circle
+              cx={x1}
+              cy={y1}
+              r={10}
+              fill="transparent"
+              style={{ cursor: "grab" }}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                onStartMoveEndpoint(wire.id, "start");
+              }}
+            />
+            <circle
+              cx={x2}
+              cy={y2}
+              r={10}
+              fill="transparent"
+              style={{ cursor: "grab" }}
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                onStartMoveEndpoint(wire.id, "end");
+              }}
+            />
+          </>
+        )}
       </g>
     );
   },

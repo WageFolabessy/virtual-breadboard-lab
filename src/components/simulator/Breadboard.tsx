@@ -348,26 +348,27 @@ export const Breadboard: React.FC = () => {
     const stripeStartX = RENDER.PADDING_X - 8;
     const stripeWidth = (BREADBOARD.COLUMNS - 1) * RENDER.NODE_SPACING + 16;
 
+    // Stripes directly follow node positions (factory data matches real-world layout)
     return [
       {
-        id: "top-power-stripe",
-        y: topPowerNode.canvasPosition.y - 10,
-        color: COLORS.POWER_RAIL,
-      },
-      {
         id: "top-ground-stripe",
-        y: topGroundNode.canvasPosition.y + 10,
+        y: topGroundNode.canvasPosition.y - 10,
         color: COLORS.GROUND_RAIL,
       },
       {
-        id: "bottom-power-stripe",
-        y: bottomPowerNode.canvasPosition.y - 10,
+        id: "top-power-stripe",
+        y: topPowerNode.canvasPosition.y + 10,
         color: COLORS.POWER_RAIL,
       },
       {
         id: "bottom-ground-stripe",
-        y: bottomGroundNode.canvasPosition.y + 10,
+        y: bottomGroundNode.canvasPosition.y - 10,
         color: COLORS.GROUND_RAIL,
+      },
+      {
+        id: "bottom-power-stripe",
+        y: bottomPowerNode.canvasPosition.y + 10,
+        color: COLORS.POWER_RAIL,
       },
     ].map((stripe) => ({
       ...stripe,
@@ -411,18 +412,23 @@ export const Breadboard: React.FC = () => {
       return [];
     }
 
+    const rightX =
+      RENDER.PADDING_X + (BREADBOARD.COLUMNS - 1) * RENDER.NODE_SPACING + 32;
+
+    // Labels directly follow node positions (factory data matches real-world layout)
     return [
-      {
-        label: "+",
-        x: RENDER.PADDING_X - 32,
-        y: topPowerNode.canvasPosition.y,
-        color: COLORS.POWER_RAIL,
-      },
+      // Left-side labels
       {
         label: "-",
         x: RENDER.PADDING_X - 32,
         y: topGroundNode.canvasPosition.y,
         color: COLORS.GROUND_RAIL,
+      },
+      {
+        label: "+",
+        x: RENDER.PADDING_X - 32,
+        y: topPowerNode.canvasPosition.y,
+        color: COLORS.POWER_RAIL,
       },
       {
         label: "+",
@@ -433,6 +439,31 @@ export const Breadboard: React.FC = () => {
       {
         label: "-",
         x: RENDER.PADDING_X - 32,
+        y: bottomGroundNode.canvasPosition.y,
+        color: COLORS.GROUND_RAIL,
+      },
+      // Right-side labels (symmetrical)
+      {
+        label: "-",
+        x: rightX,
+        y: topGroundNode.canvasPosition.y,
+        color: COLORS.GROUND_RAIL,
+      },
+      {
+        label: "+",
+        x: rightX,
+        y: topPowerNode.canvasPosition.y,
+        color: COLORS.POWER_RAIL,
+      },
+      {
+        label: "+",
+        x: rightX,
+        y: bottomPowerNode.canvasPosition.y,
+        color: COLORS.POWER_RAIL,
+      },
+      {
+        label: "-",
+        x: rightX,
         y: bottomGroundNode.canvasPosition.y,
         color: COLORS.GROUND_RAIL,
       },
@@ -578,9 +609,31 @@ export const Breadboard: React.FC = () => {
         />
       ))}
 
-      {/* Row labels (A-J silkscreen) */}
+      {/* Row labels - LEFT (A-J silkscreen) */}
       {rowLabels.map(({ row, y }) => (
         <RowLabel key={row} row={row} y={y} />
+      ))}
+
+      {/* Row labels - RIGHT (A-J silkscreen, symmetrical) */}
+      {rowLabels.map(({ row, y }) => (
+        <text
+          key={`right-${row}`}
+          x={
+            RENDER.PADDING_X +
+            (BREADBOARD.COLUMNS - 1) * RENDER.NODE_SPACING +
+            22
+          }
+          y={y}
+          fill={COLORS.SILKSCREEN_TEXT}
+          fontSize="10"
+          fontWeight="600"
+          fontFamily="Arial, sans-serif"
+          textAnchor="middle"
+          dominantBaseline="middle"
+          style={{ userSelect: "none" }}
+        >
+          {row}
+        </text>
       ))}
 
       {/* Column numbers - TOP (above row J, silkscreen) */}

@@ -66,6 +66,7 @@ const FALLBACK_DEFINITION: ComponentDefinition = {
   isTimed: false,
   transistorType: null,
   hasUserColor: false,
+  isCurrentLimiting: false, // Unknown components do not limit current
 };
 
 function getDefinition(type: string): ComponentDefinition {
@@ -293,10 +294,13 @@ function componentConducts(
  * Check if a component is a current-limiting (resistive) element.
  * When current flows through these components, it becomes "weak" current.
  * This is used for the Strong vs Weak current model in short circuit detection.
+ *
+ * TRAIT-DRIVEN: Uses the `isCurrentLimiting` trait from COMPONENT_DEFINITIONS.
+ * Any new component with this trait set to true will automatically be recognized.
  */
 function isCurrentLimitingComponent(component: CircuitComponent): boolean {
-  // Resistors limit current - any current passing through becomes weak
-  return component.type === 'resistor';
+  const def = getDefinition(component.type);
+  return def.isCurrentLimiting === true;
 }
 
 /**
@@ -534,39 +538,45 @@ function checkShortCircuit(
 }
 
 /**
- * Find active power source and its terminal node IDs (trait-driven)
+ * Find ALL active power sources and their terminal node IDs (trait-driven)
+ * Supports multiple batteries: collects all positive/negative terminal nodes
+ * into unified seed sets for the flood-fill algorithm.
  */
-function findActivePowerSource(
+function findActivePowerSources(
   components: CircuitComponent[],
   cache: Map<string, string[]>
 ): {
-  powerSource: CircuitComponent | null;
+  powerSources: CircuitComponent[];
   positiveNodes: Set<string>;
   negativeNodes: Set<string>;
 } {
-  // Find first active power source
-  const powerSource = components.find(c => isPowerSourceActive(c));
+  // Find ALL active power sources (not just the first one)
+  const powerSources = components.filter(c => isPowerSourceActive(c));
 
-  if (!powerSource) {
-    return { powerSource: null, positiveNodes: new Set(), negativeNodes: new Set() };
+  if (powerSources.length === 0) {
+    return { powerSources: [], positiveNodes: new Set(), negativeNodes: new Set() };
   }
   
-  // Find positive and negative terminals (trait-driven by pin type)
-  const positivePin = powerSource.pins.find(p => isPositiveEntryPin(p.pinType));
-  const negativePin = powerSource.pins.find(p => isNegativeEntryPin(p.pinType));
+  // Collect positive and negative terminal nodes from ALL power sources
+  const positiveNodes = new Set<string>();
+  const negativeNodes = new Set<string>();
+  
+  for (const source of powerSources) {
+    const positivePin = source.pins.find(p => isPositiveEntryPin(p.pinType));
+    const negativePin = source.pins.find(p => isNegativeEntryPin(p.pinType));
+    
+    if (positivePin?.connectedNodeId) {
+      const group = cache.get(positivePin.connectedNodeId) || [positivePin.connectedNodeId];
+      group.forEach(id => positiveNodes.add(id));
+    }
+    
+    if (negativePin?.connectedNodeId) {
+      const group = cache.get(negativePin.connectedNodeId) || [negativePin.connectedNodeId];
+      group.forEach(id => negativeNodes.add(id));
+    }
+  }
 
-  const positiveNodes = new Set(
-    positivePin?.connectedNodeId
-      ? (cache.get(positivePin.connectedNodeId) || [positivePin.connectedNodeId])
-      : []
-  );
-  const negativeNodes = new Set(
-    negativePin?.connectedNodeId
-      ? (cache.get(negativePin.connectedNodeId) || [negativePin.connectedNodeId])
-      : []
-  );
-
-  return { powerSource, positiveNodes, negativeNodes };
+  return { powerSources, positiveNodes, negativeNodes };
 }
 
 /**
@@ -611,16 +621,17 @@ export function evaluateCircuit(
   const wireAdjacency = buildWireAdjacency(wires, connectionCache);
   const componentAdjacency = buildComponentAdjacency(components, connectionCache);
   
-  // Find active power source (trait-driven)
-  const { powerSource, positiveNodes: batteryPositive, negativeNodes: batteryNegative } = 
-    findActivePowerSource(components, connectionCache);
+  // Find active power sources (trait-driven — supports multiple batteries)
+  const { powerSources, positiveNodes: batteryPositive, negativeNodes: batteryNegative } = 
+    findActivePowerSources(components, connectionCache);
   
-  if (!powerSource) {
+  if (powerSources.length === 0) {
     result.message = 'No active power source found';
     return result;
   }
   
-  result.powerSourceId = powerSource.id;
+  // Use first power source ID for backward compatibility
+  result.powerSourceId = powerSources[0].id;
   
   if (batteryPositive.size === 0 || batteryNegative.size === 0) {
     result.message = 'Power source not properly connected to breadboard';
@@ -672,7 +683,7 @@ export function evaluateCircuit(
       status: 'short-circuit',
       isCircuitComplete: false,
       activePath: shortCircuitCheck.path,
-      powerSourceId: powerSource.id,
+      powerSourceId: powerSources[0].id,
       componentStates: result.componentStates,
       shortCircuitPath: shortCircuitCheck.path,
       message: 'SHORT CIRCUIT! Direct wire path from + to - without any load',
@@ -773,7 +784,7 @@ export function evaluateCircuit(
         status: 'short-circuit',
         isCircuitComplete: false,
         activePath: intersectionPath,
-        powerSourceId: powerSource.id,
+        powerSourceId: powerSources[0].id,
         componentStates: result.componentStates,
         shortCircuitPath: intersectionPath,
         message: 'SHORT CIRCUIT! Strong positive and negative paths have merged without resistance',
@@ -904,7 +915,7 @@ export function evaluateCircuit(
       status: 'complete',
       isCircuitComplete: true,
       activePath: Array.from(allActiveNodes),
-      powerSourceId: powerSource.id,
+      powerSourceId: powerSources[0].id,
       componentStates: result.componentStates,
       message: `Circuit complete - ${activeComponentIds.length} component(s) active`,
       positiveReachable,

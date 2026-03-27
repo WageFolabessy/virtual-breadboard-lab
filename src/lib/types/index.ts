@@ -191,6 +191,8 @@ export interface ComponentDefinition {
   transistorType?: TransistorVariant;
   /** True if component accepts user-selected color during placement (LED). */
   hasUserColor?: boolean;
+  /** True if current passing through this component becomes 'weak' (current-limiting). Used by Strong/Weak current model. */
+  isCurrentLimiting?: boolean;
 }
 
 // ---- Saved Circuit (for localStorage) ----

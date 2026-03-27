@@ -14,16 +14,19 @@
 // 6. Component rendering uses registry pattern (no hardcoded type checks)
 // ============================================
 
-import React, { useSyncExternalStore, useMemo } from "react";
+import React, { useSyncExternalStore, useMemo, useCallback } from "react";
 import {
   useCircuitStore,
   getWireDrawingState,
   subscribeToWireDrawing,
+  getComponentDragState,
+  subscribeToComponentDrag,
 } from "@/lib/store/circuit-store";
+import { findNearestNode } from "@/lib/engine/breadboard-factory";
 import { useShallow } from "zustand/react/shallow";
 import { StatusIndicator } from "@/components/ui/StatusIndicator";
 import { KbdShortcut } from "@/components/ui/KbdShortcut";
-import { FloatingPanel, IconButton } from "@/components/ui";
+import { FloatingPanel, IconButton, Toast } from "@/components/ui";
 import { Breadboard } from "./Breadboard";
 import { Toolbar } from "./Toolbar";
 import { ComponentLibrary } from "./ComponentLibrary";
@@ -101,6 +104,15 @@ export const Workspace: React.FC = () => {
   );
   const selectedWireId = useCircuitStore((state) => state.selectedWireId);
   const selectedTool = useCircuitStore((state) => state.selectedTool);
+  const movingWireId = useCircuitStore((state) => state.movingWireId);
+  const movingComponentId = useCircuitStore((state) => state.movingComponentId);
+
+  // Subscribe to isolated component drag state (ref-based, NOT Zustand)
+  const componentDrag = useSyncExternalStore(
+    subscribeToComponentDrag,
+    getComponentDragState,
+    getComponentDragState,
+  );
 
   // ---- Memoized derived state ----
   // Find selected component/wire ONCE per render (not in JSX)
@@ -122,7 +134,17 @@ export const Workspace: React.FC = () => {
     removeComponent,
     selectWire,
     setButtonPressed,
+    startMoveWireEndpoint,
   } = useCircuitActions();
+  const liftComponent = useCallback((componentId: string) => {
+    useCircuitStore.getState().liftComponent(componentId);
+  }, []);
+  const placeMovedComponent = useCallback((targetNodeIds: string[]) => {
+    useCircuitStore.getState().placeMovedComponent(targetNodeIds);
+  }, []);
+  const cancelMoveComponent = useCallback(() => {
+    useCircuitStore.getState().cancelMoveComponent();
+  }, []);
   const isComponentActive = useComponentActiveChecker(components, activeNodes);
   useSimulationTicker(); // Advances 555 Timer clock every 500ms
 
@@ -135,11 +157,49 @@ export const Workspace: React.FC = () => {
   } = usePanZoom();
   const { svgRef, handleMouseMove, handleSvgClick } = useCanvasInteraction(
     wireStartNodeId,
+    movingWireId,
+    movingComponentId,
     () => selectComponent(null),
     panZoomState.scale,
     panZoomState.panX,
     panZoomState.panY,
   );
+
+  // ---- Component Drop Handler (mouseUp on SVG canvas) ----
+  const handleMouseUp = useCallback(() => {
+    if (!movingComponentId) return;
+
+    const state = useCircuitStore.getState();
+    const component = state.components.find((c) => c.id === movingComponentId);
+    const dragState = getComponentDragState();
+
+    if (!component || !dragState.isDragging) {
+      cancelMoveComponent();
+      return;
+    }
+
+    // Calculate target node for each pin based on original position + drag delta
+    const targetNodeIds: string[] = component.pins.map((pin) => {
+      if (!pin.connectedNodeId) return "";
+      const originalNode = state.nodes.get(pin.connectedNodeId);
+      if (!originalNode) return "";
+
+      const targetX = originalNode.canvasPosition.x + dragState.deltaX;
+      const targetY = originalNode.canvasPosition.y + dragState.deltaY;
+
+      const nearest = findNearestNode(targetX, targetY, state.nodes, true);
+      return nearest?.id ?? "";
+    });
+
+    // Check if all pins found valid targets
+    const allFound = targetNodeIds.every((id) => id !== "");
+
+    if (allFound) {
+      placeMovedComponent(targetNodeIds);
+    } else {
+      cancelMoveComponent();
+    }
+  }, [movingComponentId, placeMovedComponent, cancelMoveComponent]);
 
   // ---- Loading gate ----
   if (!isInitialized) {
@@ -182,6 +242,7 @@ export const Workspace: React.FC = () => {
               width="100%"
               height="100%"
               onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
               onClick={handleSvgClick}
               className="block"
               textRendering="geometricPrecision"
@@ -204,19 +265,56 @@ export const Workspace: React.FC = () => {
                     const isRecentlyPlaced = recentlyPlacedIds.has(
                       component.id,
                     );
+                    const isDragging = movingComponentId === component.id;
 
-                    return renderComponent({
+                    // Wrap in drag offset when component is being moved
+                    const rendered = renderComponent({
                       component,
                       nodes,
                       isSelected,
                       isActive,
                       simulationState,
-                      onSelect: () => selectComponent(component.id),
+                      onSelect: () => {
+                        if (selectedTool === "select" && !movingComponentId) {
+                          selectComponent(component.id);
+                        }
+                      },
                       onToggle: () => toggleSwitch(component.id),
                       onPress: () => setButtonPressed(component.id, true),
                       onRelease: () => setButtonPressed(component.id, false),
                       isRecentlyPlaced,
                     });
+
+                    if (isDragging && componentDrag.isDragging) {
+                      return (
+                        <g
+                          key={component.id}
+                          transform={`translate(${componentDrag.deltaX}, ${componentDrag.deltaY})`}
+                          opacity={0.7}
+                          style={{ cursor: "grabbing" }}
+                        >
+                          {rendered}
+                        </g>
+                      );
+                    }
+
+                    return (
+                      <g
+                        key={component.id}
+                        onPointerDown={(e) => {
+                          if (selectedTool === "select" && !movingComponentId) {
+                            e.stopPropagation();
+                            liftComponent(component.id);
+                          }
+                        }}
+                        style={{
+                          cursor:
+                            selectedTool === "select" ? "grab" : undefined,
+                        }}
+                      >
+                        {rendered}
+                      </g>
+                    );
                   })}
                 </g>
 
@@ -235,14 +333,24 @@ export const Workspace: React.FC = () => {
                         nodes={nodes}
                         isActive={isActive}
                         isSelected={isSelected}
+                        isMoving={movingWireId === wire.id}
                         selectedTool={selectedTool}
                         onSelect={selectWire}
                         onDelete={removeWire}
+                        onStartMoveEndpoint={startMoveWireEndpoint}
                       />
                     );
                   })}
 
-                  <IsolatedWirePreview color={selectedColor} />
+                  {/* Wire preview: use moved wire's color during relocation, or selectedColor for new wires */}
+                  <IsolatedWirePreview
+                    color={
+                      movingWireId
+                        ? (wires.find((w) => w.id === movingWireId)?.color ??
+                          selectedColor)
+                        : selectedColor
+                    }
+                  />
                 </g>
               </g>
             </svg>
@@ -336,6 +444,9 @@ export const Workspace: React.FC = () => {
 
       {/* Footer (Extracted per AGENTS.md) */}
       <Footer />
+
+      {/* Non-blocking toast notifications (replaces alert()) */}
+      <Toast />
     </div>
   );
 };

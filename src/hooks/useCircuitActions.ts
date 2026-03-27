@@ -35,7 +35,11 @@ export function useCircuitActions() {
     useCircuitStore.getState().setButtonPressed(componentId, pressed);
   }, []);
 
-  return { selectComponent, removeWire, toggleSwitch, removeComponent, selectWire, cancelComponentPlacement, setButtonPressed };
+  const startMoveWireEndpoint = useCallback((wireId: string, endpoint: 'start' | 'end') => {
+    useCircuitStore.getState().startMoveWireEndpoint(wireId, endpoint);
+  }, []);
+
+  return { selectComponent, removeWire, toggleSwitch, removeComponent, selectWire, cancelComponentPlacement, setButtonPressed, startMoveWireEndpoint };
 }
 
 /**

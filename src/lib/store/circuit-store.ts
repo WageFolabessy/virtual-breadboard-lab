@@ -186,8 +186,15 @@ interface CircuitStoreState {
   // UI State
   selectedTool: ToolType;
   selectedComponentId: string | null;
-  selectedWireId: string | null; // NEW: Selected wire (mutually exclusive with selectedComponentId)
+  selectedWireId: string | null;
   wireStartNodeId: string | null;
+  
+  // Wire relocation mode
+  movingWireId: string | null;
+  movingWireEndpoint: 'start' | 'end' | null;
+  
+  // Component relocation mode
+  movingComponentId: string | null;
   
   // Simulation results
   simulation: SimulationResult;
@@ -204,6 +211,9 @@ interface CircuitStoreState {
   
   // Onboarding tour state
   isTourRunning: boolean;
+  
+  // System message (toast notification — replaces blocking alert())
+  systemMessage: string | null;
   
   // History for Undo/Redo
   history: {
@@ -264,6 +274,19 @@ interface CircuitStoreActions {
   // Onboarding Tour Actions
   startTour: () => void;
   stopTour: () => void;
+  
+  // System Message Actions
+  setSystemMessage: (msg: string | null) => void;
+  
+  // Wire Relocation Actions
+  startMoveWireEndpoint: (wireId: string, endpoint: 'start' | 'end') => void;
+  finishMoveWireEndpoint: (newNodeId: string) => void;
+  cancelMoveWireEndpoint: () => void;
+  
+  // Component Relocation Actions
+  liftComponent: (componentId: string) => void;
+  placeMovedComponent: (targetNodeIds: string[]) => void;
+  cancelMoveComponent: () => void;
   
   // Initialize
   initialize: () => void;
@@ -348,6 +371,10 @@ const initialState: CircuitStoreState = {
   placementPins: [],
   recentlyPlacedIds: new Set(),
   isTourRunning: false,
+  systemMessage: null,
+  movingWireId: null,
+  movingWireEndpoint: null,
+  movingComponentId: null,
   history: { past: [], future: [] },
 };
 
@@ -379,6 +406,12 @@ export const useCircuitStore = create<CircuitStore>()(
         const node = state.nodes.get(nodeId);
         
         if (!node) return;
+        
+        // ---- Wire Relocation: intercept click when moving a wire endpoint ----
+        if (state.movingWireId) {
+          state.finishMoveWireEndpoint(nodeId);
+          return;
+        }
         
         // TRAIT-DRIVEN: Check if selectedTool is a component type from COMPONENT_DEFINITIONS
         // This eliminates the need for hardcoded type lists
@@ -618,8 +651,8 @@ export const useCircuitStore = create<CircuitStore>()(
           const TRENCH_MAP: Record<string, string> = { 'E': 'F', 'F': 'E' };
           const oppositeRow = TRENCH_MAP[rootRow];
           if (!oppositeRow) {
-            // User clicked a non-trench row — tell them why
-            alert('IC must be placed on Row E or Row F to straddle the center trench.');
+            // User clicked a non-trench row — notify via toast
+            get().setSystemMessage('IC must be placed on Row E or Row F to straddle the center trench.');
             return;
           }
           
@@ -750,7 +783,7 @@ export const useCircuitStore = create<CircuitStore>()(
                 if (prevState) {
                   set((s) => ({ ...s, ...prevState }));
                 }
-                alert('Invalid placement. All 4 pins must fit on empty breadboard nodes.');
+                get().setSystemMessage('Invalid placement. All 4 pins must fit on empty breadboard nodes.');
                 return;
               }
             }
@@ -963,20 +996,25 @@ export const useCircuitStore = create<CircuitStore>()(
         const state = get();
         let anyChanged = false;
         
-        // Helper: check if a pin's node reaches a voltage set (connection-group-aware)
+        // Build connection-group cache ONCE per tick — O(N) amortized
+        // This replaces the old O(N)-per-call iteration of the entire nodes Map.
+        const groupToNodes = new Map<string, string[]>();
+        state.nodes.forEach((node, id) => {
+          const group = node.connectionGroup;
+          if (!groupToNodes.has(group)) groupToNodes.set(group, []);
+          groupToNodes.get(group)!.push(id);
+        });
+        
+        // O(group_size) per call — typically ~5 nodes per terminal strip
         const pinReaches = (pinNodeId: string, voltageSet: Set<string>): boolean => {
-          // Direct check first
+          // Direct check first (O(1))
           if (voltageSet.has(pinNodeId)) return true;
-          // Expand through connection group
+          // Expand through connection group using pre-built cache
           const node = state.nodes.get(pinNodeId);
           if (!node) return false;
-          // Check all nodes in the same connection group
-          for (const [id, n] of state.nodes) {
-            if (n.connectionGroup === node.connectionGroup && voltageSet.has(id)) {
-              return true;
-            }
-          }
-          return false;
+          const groupMembers = groupToNodes.get(node.connectionGroup);
+          if (!groupMembers) return false;
+          return groupMembers.some(id => voltageSet.has(id));
         };
         
         // TRAIT-DRIVEN: Find all timed components and toggle their clock if powered
@@ -1143,6 +1181,232 @@ export const useCircuitStore = create<CircuitStore>()(
       
       stopTour: () => {
         set({ isTourRunning: false });
+      },
+      
+      // ---- System Message Actions ----
+      setSystemMessage: (msg) => {
+        set({ systemMessage: msg });
+        if (msg !== null) {
+          // Auto-dismiss after 3 seconds
+          setTimeout(() => {
+            // Only clear if the message hasn't been replaced
+            if (get().systemMessage === msg) {
+              set({ systemMessage: null });
+            }
+          }, 3000);
+        }
+      },
+      
+      // ---- Wire Relocation Actions ----
+      startMoveWireEndpoint: (wireId, endpoint) => {
+        const state = get();
+        const wire = state.wires.find(w => w.id === wireId);
+        if (!wire) return;
+        
+        // Determine the anchor node (the end that stays fixed)
+        const anchorNodeId = endpoint === 'start' ? wire.endNodeId : wire.startNodeId;
+        
+        set({
+          movingWireId: wireId,
+          movingWireEndpoint: endpoint,
+          // Clear any existing selections
+          selectedComponentId: null,
+          selectedWireId: wireId,
+        });
+        
+        // Reuse existing wire drawing preview from anchor node
+        startWireDrawing(anchorNodeId);
+      },
+      
+      finishMoveWireEndpoint: (newNodeId) => {
+        const state = get();
+        const { movingWireId, movingWireEndpoint } = state;
+        if (!movingWireId || !movingWireEndpoint) return;
+        
+        const wire = state.wires.find(w => w.id === movingWireId);
+        if (!wire) {
+          state.cancelMoveWireEndpoint();
+          return;
+        }
+        
+        // Don't allow connecting both ends to same node
+        const anchorNodeId = movingWireEndpoint === 'start' ? wire.endNodeId : wire.startNodeId;
+        if (newNodeId === anchorNodeId) {
+          state.cancelMoveWireEndpoint();
+          return;
+        }
+        
+        // Check if this would duplicate an existing wire
+        const wouldDuplicate = state.wires.some(w => {
+          if (w.id === movingWireId) return false;
+          return (
+            (w.startNodeId === anchorNodeId && w.endNodeId === newNodeId) ||
+            (w.startNodeId === newNodeId && w.endNodeId === anchorNodeId)
+          );
+        });
+        
+        if (wouldDuplicate) {
+          state.cancelMoveWireEndpoint();
+          get().setSystemMessage('A wire already connects these two nodes.');
+          return;
+        }
+        
+        get().saveSnapshot();
+        
+        // Update the wire endpoint
+        const updatedWires = state.wires.map(w => {
+          if (w.id !== movingWireId) return w;
+          if (movingWireEndpoint === 'start') {
+            return { ...w, startNodeId: newNodeId };
+          } else {
+            return { ...w, endNodeId: newNodeId };
+          }
+        });
+        
+        stopWireDrawing();
+        
+        set({
+          wires: updatedWires,
+          movingWireId: null,
+          movingWireEndpoint: null,
+        });
+        
+        get().runSimulation();
+      },
+      
+      cancelMoveWireEndpoint: () => {
+        stopWireDrawing();
+        set({
+          movingWireId: null,
+          movingWireEndpoint: null,
+        });
+      },
+      
+      // ---- Component Relocation Actions ----
+      liftComponent: (componentId) => {
+        const state = get();
+        const component = state.components.find(c => c.id === componentId);
+        if (!component) return;
+        
+        get().saveSnapshot();
+        
+        // Collect original pin node IDs for revert
+        const originalPinNodeIds = component.pins.map(p => p.connectedNodeId ?? '');
+        
+        // Free all nodes occupied by this component
+        const updatedNodes = new Map(state.nodes);
+        component.pins.forEach((pin) => {
+          if (pin.connectedNodeId) {
+            const node = updatedNodes.get(pin.connectedNodeId);
+            if (node) {
+              updatedNodes.set(pin.connectedNodeId, {
+                ...node,
+                isOccupied: false,
+                occupiedBy: undefined,
+              });
+            }
+          }
+        });
+        
+        set({
+          nodes: updatedNodes,
+          movingComponentId: componentId,
+          selectedComponentId: componentId,
+        });
+        
+        // Start isolated drag state
+        startComponentDrag(componentId, originalPinNodeIds);
+      },
+      
+      placeMovedComponent: (targetNodeIds) => {
+        const state = get();
+        const { movingComponentId } = state;
+        if (!movingComponentId) return;
+        
+        const component = state.components.find(c => c.id === movingComponentId);
+        if (!component) {
+          state.cancelMoveComponent();
+          return;
+        }
+        
+        // Validate: all target nodes must exist and be unoccupied
+        const updatedNodes = new Map(state.nodes);
+        const allValid = targetNodeIds.every((nodeId) => {
+          if (!nodeId) return false;
+          const node = updatedNodes.get(nodeId);
+          return node && !node.isOccupied;
+        });
+        
+        if (!allValid || targetNodeIds.length !== component.pins.length) {
+          // Invalid drop — revert to original position
+          state.cancelMoveComponent();
+          get().setSystemMessage('Cannot place component here — nodes occupied or out of bounds.');
+          return;
+        }
+        
+        // Update component pins to new node IDs
+        const updatedComponents = state.components.map(c => {
+          if (c.id !== movingComponentId) return c;
+          return {
+            ...c,
+            pins: c.pins.map((pin, i) => ({
+              ...pin,
+              connectedNodeId: targetNodeIds[i],
+            })),
+          };
+        });
+        
+        // Mark new nodes as occupied
+        targetNodeIds.forEach((nodeId) => {
+          const node = updatedNodes.get(nodeId);
+          if (node) {
+            updatedNodes.set(nodeId, {
+              ...node,
+              isOccupied: true,
+              occupiedBy: movingComponentId,
+            });
+          }
+        });
+        
+        stopComponentDrag();
+        
+        set({
+          components: updatedComponents,
+          nodes: updatedNodes,
+          movingComponentId: null,
+        });
+        
+        get().runSimulation();
+      },
+      
+      cancelMoveComponent: () => {
+        const dragState = getComponentDragState();
+        const state = get();
+        
+        // Restore original node occupation
+        if (dragState.originalPinNodeIds.length > 0 && state.movingComponentId) {
+          const updatedNodes = new Map(state.nodes);
+          dragState.originalPinNodeIds.forEach((nodeId) => {
+            if (!nodeId) return;
+            const node = updatedNodes.get(nodeId);
+            if (node) {
+              updatedNodes.set(nodeId, {
+                ...node,
+                isOccupied: true,
+                occupiedBy: state.movingComponentId!,
+              });
+            }
+          });
+          
+          set({
+            nodes: updatedNodes,
+            movingComponentId: null,
+          });
+        } else {
+          set({ movingComponentId: null });
+        }
+        
+        stopComponentDrag();
       },
       
       // ---- Export / Import ----
@@ -1455,4 +1719,62 @@ function notifyListeners(): void {
 export function subscribeToWireDrawing(listener: () => void): () => void {
   wireDrawingListeners.add(listener);
   return () => wireDrawingListeners.delete(listener);
+}
+
+// ---- Isolated Component Drag State (Does NOT trigger component re-renders) ----
+// Same pattern as wireDrawingState — ref-based, NOT Zustand
+interface ComponentDragState {
+  isDragging: boolean;
+  componentId: string | null;
+  deltaX: number;
+  deltaY: number;
+  originalPinNodeIds: string[]; // For revert on invalid drop
+}
+
+let componentDragState: ComponentDragState = {
+  isDragging: false,
+  componentId: null,
+  deltaX: 0,
+  deltaY: 0,
+  originalPinNodeIds: [],
+};
+
+const componentDragListeners = new Set<() => void>();
+let isNotifyingDrag = false;
+
+export function getComponentDragState(): ComponentDragState {
+  return componentDragState;
+}
+
+export function setComponentDragPosition(deltaX: number, deltaY: number): void {
+  if (!componentDragState.isDragging) return;
+  if (componentDragState.deltaX === deltaX && componentDragState.deltaY === deltaY) return;
+  
+  componentDragState = { ...componentDragState, deltaX, deltaY };
+  notifyComponentDragListeners();
+}
+
+export function startComponentDrag(componentId: string, originalPinNodeIds: string[]): void {
+  componentDragState = { isDragging: true, componentId, deltaX: 0, deltaY: 0, originalPinNodeIds };
+  notifyComponentDragListeners();
+}
+
+export function stopComponentDrag(): void {
+  componentDragState = { isDragging: false, componentId: null, deltaX: 0, deltaY: 0, originalPinNodeIds: [] };
+  notifyComponentDragListeners();
+}
+
+function notifyComponentDragListeners(): void {
+  if (isNotifyingDrag) return;
+  isNotifyingDrag = true;
+  try {
+    componentDragListeners.forEach(fn => fn());
+  } finally {
+    isNotifyingDrag = false;
+  }
+}
+
+export function subscribeToComponentDrag(listener: () => void): () => void {
+  componentDragListeners.add(listener);
+  return () => componentDragListeners.delete(listener);
 }

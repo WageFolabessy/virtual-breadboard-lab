@@ -73,15 +73,15 @@ function getRailCanvasPosition(
   let y: number;
   
   if (position === 'top') {
-    // Top rails at the top of the board
-    y = RENDER.PADDING_Y + (railType === 'power' ? 0 : RENDER.NODE_SPACING + RENDER.RAIL_GAP / 2);
+    // Real-world MB-102 layout: Ground (-) at top, Power (+) below
+    y = RENDER.PADDING_Y + (railType === 'ground' ? 0 : RENDER.NODE_SPACING + RENDER.RAIL_GAP / 2);
   } else {
-    // Bottom rails at the bottom of the board
+    // Bottom rails: Ground (-) at top, Power (+) below (same order as top rails)
     const terminalSectionHeight = 5 * RENDER.NODE_SPACING;
     const topContentHeight = RENDER.PADDING_Y + (2 * RENDER.NODE_SPACING) + RENDER.RAIL_GAP + 
                             RENDER.RAIL_TO_TERMINAL_GAP + terminalSectionHeight + RENDER.SECTION_GAP + 
                             terminalSectionHeight + RENDER.RAIL_TO_TERMINAL_GAP;
-    y = topContentHeight + (railType === 'power' ? 0 : RENDER.NODE_SPACING + RENDER.RAIL_GAP / 2);
+    y = topContentHeight + (railType === 'ground' ? 0 : RENDER.NODE_SPACING + RENDER.RAIL_GAP / 2);
   }
   
   return { x, y };
@@ -119,7 +119,7 @@ function createRailNode(
     
   return {
     id: `${rowLabel}-${col}`,
-    position: { row: railType === 'power' ? -2 : -1, col },
+    position: { row: railType === 'ground' ? -2 : -1, col },
     stripType: railType === 'power' ? 'power-rail' : 'ground-rail',
     railType,
     connectionGroup: getRailConnectionGroup(railType, position),
@@ -219,8 +219,8 @@ export function getConnectionGroups(nodes: Map<string, BreadboardNode>): Map<str
  * Creates 2D grid representation for easy position-based access
  */
 export function createNodeGrid(nodes: Map<string, BreadboardNode>): BreadboardNode[][] {
-  // This creates a sparse 2D array indexed by visual row position
-  // Rows: power-top, ground-top, A-E, F-J, power-bottom, ground-bottom
+  // This creates a sparse 2D array indexed by visual row position (top-to-bottom)
+  // Layout: ground-top, power-top, J-F, E-A, ground-bottom, power-bottom
   const grid: BreadboardNode[][] = [];
   
   // Initialize rows
@@ -231,14 +231,14 @@ export function createNodeGrid(nodes: Map<string, BreadboardNode>): BreadboardNo
   nodes.forEach((node) => {
     let rowIndex: number;
     
-    if (node.id.startsWith('power-top')) {
-      rowIndex = 0;
-    } else if (node.id.startsWith('ground-top')) {
-      rowIndex = 1;
-    } else if (node.id.startsWith('power-bottom')) {
-      rowIndex = 12;
+    if (node.id.startsWith('ground-top')) {
+      rowIndex = 0;  // Ground (-) is the topmost row
+    } else if (node.id.startsWith('power-top')) {
+      rowIndex = 1;  // Power (+) is the second row
     } else if (node.id.startsWith('ground-bottom')) {
-      rowIndex = 13;
+      rowIndex = 12; // Ground (-) is above power in bottom section
+    } else if (node.id.startsWith('power-bottom')) {
+      rowIndex = 13; // Power (+) is the bottommost row
     } else {
       // Terminal node - extract row letter
       const rowLetter = node.id.split('-')[0];
@@ -252,4 +252,39 @@ export function createNodeGrid(nodes: Map<string, BreadboardNode>): BreadboardNo
   });
   
   return grid;
+}
+
+/**
+ * Finds the nearest breadboard node to a given canvas position.
+ * Returns null if no node is within the snap tolerance (NODE_SPACING / 2).
+ * 
+ * @param canvasX - X position in SVG content space
+ * @param canvasY - Y position in SVG content space
+ * @param nodes - All breadboard nodes
+ * @param excludeOccupied - If true, skip nodes that are currently occupied
+ */
+export function findNearestNode(
+  canvasX: number,
+  canvasY: number,
+  nodes: Map<string, BreadboardNode>,
+  excludeOccupied: boolean = false,
+): BreadboardNode | null {
+  const snapTolerance = RENDER.NODE_SPACING / 2;
+  let nearest: BreadboardNode | null = null;
+  let minDist = Infinity;
+  
+  nodes.forEach((node) => {
+    if (excludeOccupied && node.isOccupied) return;
+    
+    const dx = node.canvasPosition.x - canvasX;
+    const dy = node.canvasPosition.y - canvasY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    
+    if (dist < minDist && dist <= snapTolerance) {
+      minDist = dist;
+      nearest = node;
+    }
+  });
+  
+  return nearest;
 }
