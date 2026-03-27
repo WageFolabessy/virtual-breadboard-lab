@@ -1,24 +1,39 @@
 // ============================================
-// CIRCUIT EVALUATOR ENGINE v6.0
-// Trait-Driven 2-Way Flood Fill with Multi-Pass Stabilization
+// CIRCUIT EVALUATOR ENGINE v7.1
+// Trait-Driven 2-Way Flood Fill with Strong/Weak Current Tracking
+// + Pull-Down/Pull-Up Override Resolution
 // Supports Transistors (NPN/PNP) as Dynamic Switches
 // ============================================
 // 
 // ELECTRICAL REALITY:
 // 1. Electricity flows through ALL available paths simultaneously (parallel circuits)
 // 2. A component is active if its input touches POSITIVE and output touches NEGATIVE
-// 3. Short Circuit: Direct wire path from + to - without any load
+// 3. Short Circuit: Direct STRONG path from + to - without any load
 // 4. Polarized components only allow flow in one direction (Anode→Cathode)
 // 
+// STRONG vs WEAK CURRENT MODEL (v7.0):
+// - STRONG current: Flows through wires, closed switches, batteries (no resistance)
+// - WEAK current: Flows through resistors (current-limiting components)
+// - Short Circuit Rule: ONLY triggered when strongPositive ∩ strongNegative ≠ ∅
+//   (Resistive bridges are SAFE - weak current prevents dead shorts)
+// - Load Activation: Components activate if ANY current (strong OR weak) reaches both sides
+//
+// PULL-DOWN/PULL-UP OVERRIDE (v7.1):
+// - Strong connections overwhelm weak connections of opposite polarity
+// - If strongNegative ∩ weakPositive → node is pulled to GND (remove from weakPositive)
+// - If strongPositive ∩ weakNegative → node is pulled to VCC (remove from weakNegative)
+// - This correctly handles bypass circuits where switches "steal" current from LEDs
+// 
 // ALGORITHM:
-// Step 1: Flood from Battery+ → find all "positiveReachable" nodes
-// Step 2: Flood from Battery- → find all "negativeReachable" nodes
-// Step 3: For each component, check if pins span both sets
-// Step 4: Detect short circuits (wire-only path from + to -)
+// Step 1: Flood from Battery+ → find {strongPositive, weakPositive} nodes
+// Step 2: Flood from Battery- → find {strongNegative, weakNegative} nodes
+// Step 3: Short circuit check: strongPositive ∩ strongNegative = dead short
+// Step 4: Strong override: annihilate weak nodes pulled to opposite polarity
+// Step 5: For each component, check if pins span resolved positive AND negative sets
 //
 // TRAIT-DRIVEN DESIGN (AGENTS.md Mandate):
 // Components are evaluated PURELY by their universal traits (isLoad, isPolarized,
-// isConductive) from COMPONENT_DEFINITIONS — NEVER by hardcoded type strings.
+// isConductive, isCurrentLimiting) from COMPONENT_DEFINITIONS — NEVER by hardcoded type strings.
 // This ensures any new component added to the dictionary works automatically.
 // ============================================
 
@@ -71,6 +86,15 @@ function isNegativeEntryPin(pinType: string): boolean {
 // ---- Circuit Status Types ----
 export type CircuitStatus = 'incomplete' | 'complete' | 'short-circuit';
 
+// Current strength tracking for Strong vs Weak current model
+export type CurrentStrength = 'strong' | 'weak';
+
+// Result type for floodFill - tracks both strong and weak reachable nodes
+export interface FloodFillResult {
+  strong: Set<string>;
+  weak: Set<string>;
+}
+
 export interface SimulationResultV2 {
   status: CircuitStatus;
   isCircuitComplete: boolean;
@@ -80,6 +104,7 @@ export interface SimulationResultV2 {
   shortCircuitPath?: string[];
   message: string;
   // Voltage potential sets - nodes reachable from each battery terminal
+  // Combined (strong ∪ weak) for backwards compatibility and activation checks
   positiveReachable: Set<string>;
   negativeReachable: Set<string>;
 }
@@ -265,13 +290,30 @@ function componentConducts(
 }
 
 /**
- * FLOOD FILL from a starting set of nodes
+ * Check if a component is a current-limiting (resistive) element.
+ * When current flows through these components, it becomes "weak" current.
+ * This is used for the Strong vs Weak current model in short circuit detection.
+ */
+function isCurrentLimitingComponent(component: CircuitComponent): boolean {
+  // Resistors limit current - any current passing through becomes weak
+  return component.type === 'resistor';
+}
+
+/**
+ * FLOOD FILL from a starting set of nodes (v7.0 - Strong/Weak Current Tracking)
  * Traverses through wires and conducting components
- * Returns all reachable node IDs
+ * Returns { strong: Set<string>, weak: Set<string> } for reachable nodes
+ * 
+ * STRONG vs WEAK CURRENT MODEL:
+ * - Current starts as STRONG from battery terminals
+ * - Wires and closed switches PRESERVE current strength
+ * - Resistors DOWNGRADE current from strong → weak
+ * - Weak current stays weak through additional resistors (no progressive weakening)
  * 
  * @param direction - 'forward' (from +) respects polarity, 'backward' (from -) reverses it
  * @param positiveCtx - Current positiveReachable set (for transistor base checks)
  * @param negativeCtx - Current negativeReachable set (for transistor base checks)
+ * @param initialStrength - Starting current strength ('strong' by default)
  */
 function floodFill(
   startNodes: Set<string>,
@@ -280,20 +322,49 @@ function floodFill(
   cache: Map<string, string[]>,
   direction: 'forward' | 'backward',
   positiveCtx?: Set<string>,
-  negativeCtx?: Set<string>
-): Set<string> {
-  const reachable = new Set<string>();
-  const visited = new Set<string>();
-  const queue: string[] = [];
+  negativeCtx?: Set<string>,
+  initialStrength: CurrentStrength = 'strong'
+): FloodFillResult {
+  // Track strong and weak reachable nodes separately
+  const strongReachable = new Set<string>();
+  const weakReachable = new Set<string>();
+  
+  // Track visited nodes AND their best strength level to handle reconvergent paths
+  // A node can be upgraded from weak to strong if a strong path reaches it later
+  const nodeStrength = new Map<string, CurrentStrength>();
+  
+  // BFS queue: [nodeId, currentStrength]
+  const queue: Array<{ nodeId: string; strength: CurrentStrength }> = [];
+  
+  // Helper to add a node with given strength
+  const addNode = (nodeId: string, strength: CurrentStrength): boolean => {
+    const existingStrength = nodeStrength.get(nodeId);
+    
+    // If node not visited, or if we have stronger current than before
+    if (!existingStrength || (existingStrength === 'weak' && strength === 'strong')) {
+      nodeStrength.set(nodeId, strength);
+      
+      // Update the appropriate reachable set
+      if (strength === 'strong') {
+        strongReachable.add(nodeId);
+        weakReachable.delete(nodeId); // Upgrade from weak to strong
+      } else {
+        // Only add to weak if not already strong
+        if (!strongReachable.has(nodeId)) {
+          weakReachable.add(nodeId);
+        }
+      }
+      return true; // Node was added/upgraded, should process
+    }
+    return false; // Already visited with same or better strength
+  };
   
   // Initialize with start nodes and their connection groups
   for (const startNode of startNodes) {
     const group = cache.get(startNode) || [startNode];
     for (const nodeId of group) {
-      if (!visited.has(nodeId)) {
-        visited.add(nodeId);
-        reachable.add(nodeId);
-        queue.push(nodeId);
+      if (addNode(nodeId, initialStrength)) {
+        queue.push({ nodeId, strength: initialStrength });
       }
     }
   }
@@ -309,18 +380,16 @@ function floodFill(
       break;
     }
     
-    const currentNode = queue.shift()!;
+    const { nodeId: currentNode, strength: currentStrength } = queue.shift()!;
     
     // === TRAVERSE THROUGH WIRES ===
+    // Wires PRESERVE current strength (strong stays strong, weak stays weak)
     const wireNeighbors = wireAdjacency.get(currentNode) || new Set();
     for (const neighbor of wireNeighbors) {
-      // Mark entire connection group
       const neighborGroup = cache.get(neighbor) || [neighbor];
       for (const nodeId of neighborGroup) {
-        if (!visited.has(nodeId)) {
-          visited.add(nodeId);
-          reachable.add(nodeId);
-          queue.push(nodeId);
+        if (addNode(nodeId, currentStrength)) {
+          queue.push({ nodeId, strength: currentStrength });
         }
       }
     }
@@ -344,6 +413,12 @@ function floodFill(
         if (direction === 'forward' && !isPositiveEntry) continue;
         if (direction === 'backward' && !isNegativeEntry) continue;
       }
+      
+      // CURRENT STRENGTH DOWNGRADE: Resistors convert strong → weak
+      // Weak current stays weak (no progressive weakening in this model)
+      const outputStrength: CurrentStrength = isCurrentLimitingComponent(component) 
+        ? 'weak' 
+        : currentStrength;
       
       // ---- TACTILE BUTTON PAIRED-PIN ROUTING ----
       // Physical wiring: Left pair (tb-top-left ↔ tb-bottom-left) permanently shorted.
@@ -371,37 +446,33 @@ function floodFill(
           }
         }
         
-        // Traverse only to computed reachable pins
+        // Traverse only to computed reachable pins (tactile buttons preserve strength)
         for (const reachableType of reachablePinTypes) {
           const targetPin = component.pins.find(p => p.pinType === reachableType);
           if (!targetPin?.connectedNodeId) continue;
           const targetGroup = cache.get(targetPin.connectedNodeId) || [targetPin.connectedNodeId];
           for (const nodeId of targetGroup) {
-            if (!visited.has(nodeId)) {
-              visited.add(nodeId);
-              reachable.add(nodeId);
-              queue.push(nodeId);
+            if (addNode(nodeId, currentStrength)) { // Tactile buttons preserve strength
+              queue.push({ nodeId, strength: currentStrength });
             }
           }
         }
         continue; // Skip generic traversal for this component
       }
       
-      // Add all nodes on the other side of the component
+      // Add all nodes on the other side of the component with computed output strength
       for (const otherNodeId of otherPinNodeIds) {
         const otherGroup = cache.get(otherNodeId) || [otherNodeId];
         for (const nodeId of otherGroup) {
-          if (!visited.has(nodeId)) {
-            visited.add(nodeId);
-            reachable.add(nodeId);
-            queue.push(nodeId);
+          if (addNode(nodeId, outputStrength)) {
+            queue.push({ nodeId, strength: outputStrength });
           }
         }
       }
     }
   }
   
-  return reachable;
+  return { strong: strongReachable, weak: weakReachable };
 }
 
 /**
@@ -614,53 +685,82 @@ export function evaluateCircuit(
   // Transistors create a chicken-and-egg problem: their conductivity depends
   // on voltage state that is computed BY the flood-fill. We solve this by
   // iterating until the reachable sets stabilize (no new nodes energized).
+  // 
+  // STRONG vs WEAK CURRENT MODEL (v7.1):
+  // We now track FOUR sets: strongPositive, weakPositive, strongNegative, weakNegative
+  // Short circuits only occur when strongPositive ∩ strongNegative ≠ ∅
+  // Pull-down/pull-up override: strong annihilates opposite-polarity weak
+  // Component activation uses resolved (strong ∪ weak)Positive and (strong ∪ weak)Negative
+  let strongPositiveNodes = new Set<string>();
+  let weakPositiveNodes = new Set<string>();
+  let strongNegativeNodes = new Set<string>();
+  let weakNegativeNodes = new Set<string>();
+  
+  // Combined sets for backwards compatibility and activation checks
   let positiveReachable = new Set<string>();
   let negativeReachable = new Set<string>();
+  
   const MAX_STABILIZATION_PASSES = 10;
   
   for (let pass = 0; pass < MAX_STABILIZATION_PASSES; pass++) {
     // Flood from POSITIVE (forward direction) — passing current context for transistor checks
-    const newPositive = floodFill(
+    const posResult = floodFill(
       initialPositiveSeeds,
       wireAdjacency,
       componentAdjacency,
       connectionCache,
       'forward',
-      positiveReachable,  // Previous pass context
+      positiveReachable,  // Previous pass context (combined for transistor checks)
       negativeReachable,
+      'strong' // Start with strong current from battery
     );
     
     // Flood from NEGATIVE (backward direction)
-    const newNegative = floodFill(
+    // Use UPDATED positive sets for PNP base checks
+    const newPositiveCombined = new Set([...posResult.strong, ...posResult.weak]);
+    const negResult = floodFill(
       initialNegativeSeeds,
       wireAdjacency,
       componentAdjacency,
       connectionCache,
       'backward',
-      newPositive,         // Use UPDATED positive set for PNP base checks
+      newPositiveCombined,  // Use UPDATED positive set for PNP base checks
       negativeReachable,
+      'strong' // Start with strong current from battery
     );
     
-    // Check if sets have stabilized (no new nodes energized)
-    const hasChanged = newPositive.size !== positiveReachable.size ||
-                       newNegative.size !== negativeReachable.size;
+    // Compute combined sets for stabilization check
+    const newNegativeCombined = new Set([...negResult.strong, ...negResult.weak]);
     
-    positiveReachable = newPositive;
-    negativeReachable = newNegative;
+    // Check if sets have stabilized (no new nodes energized)
+    const hasChanged = newPositiveCombined.size !== positiveReachable.size ||
+                       newNegativeCombined.size !== negativeReachable.size;
+    
+    // Update all tracking sets
+    strongPositiveNodes = posResult.strong;
+    weakPositiveNodes = posResult.weak;
+    strongNegativeNodes = negResult.strong;
+    weakNegativeNodes = negResult.weak;
+    positiveReachable = newPositiveCombined;
+    negativeReachable = newNegativeCombined;
     
     if (!hasChanged) break; // Stable — no transistors changed state
   }
   
-  // === POST-FLOOD-FILL SHORT CIRCUIT DETECTION ===
-  // After traversal through conductive components (resistors, closed switches, etc.),
-  // check if positive and negative reachable sets overlap. Overlapping nodes mean
-  // current can flow from + to - through conductive bridges without being consumed
-  // by a load — this is a short circuit that the wire-only check above cannot catch.
+  // === POST-FLOOD-FILL SHORT CIRCUIT DETECTION (v7.0: Strong-Only Check) ===
+  // CRITICAL FIX: Only check intersection of STRONG sets!
+  // A resistive bridge (Battery+ → Resistor → Switch → Battery-) creates weak current,
+  // NOT a short circuit. Only STRONG-to-STRONG paths without resistance are dead shorts.
+  //
+  // Old (buggy): positiveReachable ∩ negativeReachable → false positive on resistive bridges
+  // New (fixed): strongPositiveNodes ∩ strongNegativeNodes → only true dead shorts
   {
     let hasIntersection = false;
     const intersectionPath: string[] = [];
-    for (const node of positiveReachable) {
-      if (negativeReachable.has(node)) {
+    
+    // ONLY check intersection of STRONG sets
+    for (const node of strongPositiveNodes) {
+      if (strongNegativeNodes.has(node)) {
         hasIntersection = true;
         intersectionPath.push(node);
         break; // One overlap is sufficient to confirm short
@@ -676,14 +776,46 @@ export function evaluateCircuit(
         powerSourceId: powerSource.id,
         componentStates: result.componentStates,
         shortCircuitPath: intersectionPath,
-        message: 'SHORT CIRCUIT! Positive and negative paths have merged through conductive components',
+        message: 'SHORT CIRCUIT! Strong positive and negative paths have merged without resistance',
         positiveReachable: new Set<string>(),
         negativeReachable: new Set<string>(),
       };
     }
   }
   
+  // === STRONG OVERRIDE RESOLUTION (v7.1: Pull-Down/Pull-Up Logic) ===
+  // In physical circuits, a direct (strong) connection to Ground/VCC completely
+  // overwhelms a resistive (weak) connection of opposite polarity.
+  // 
+  // Example: Battery+ → Resistor → [Node A] → Switch(closed) → Battery-
+  //          Node A is weakPositive (through resistor) AND strongNegative (through switch)
+  //          The switch "pulls" Node A to Ground, overpowering the weak positive.
+  //          Result: LED with anode at Node A should be OFF (no positive voltage).
+  //
+  // RESOLUTION RULES:
+  // - If strongNegative ∩ weakPositive → delete from weakPositive (pulled to GND)
+  // - If strongPositive ∩ weakNegative → delete from weakNegative (pulled to VCC)
+  {
+    // Pull-DOWN: Strong negative annihilates weak positive
+    for (const node of strongNegativeNodes) {
+      weakPositiveNodes.delete(node);
+    }
+    
+    // Pull-UP: Strong positive annihilates weak negative
+    for (const node of strongPositiveNodes) {
+      weakNegativeNodes.delete(node);
+    }
+    
+    // Rebuild combined sets AFTER override resolution
+    positiveReachable = new Set([...strongPositiveNodes, ...weakPositiveNodes]);
+    negativeReachable = new Set([...strongNegativeNodes, ...weakNegativeNodes]);
+  }
+  
   // === STEP 4: EVALUATE EACH COMPONENT (Trait-Driven) ===
+  // COMPONENT ACTIVATION (v7.1): Uses resolved (strong ∪ weak) reachable sets.
+  // Components activate if ANY current (strong OR weak) reaches both their pins.
+  // AFTER strong override: weak nodes pulled to opposite polarity are excluded.
+  // This allows LEDs to light up through resistors, but turn OFF when bypassed.
   let hasActiveLoad = false;
   const activeComponentIds: string[] = [];
   const allActiveNodes = new Set<string>();

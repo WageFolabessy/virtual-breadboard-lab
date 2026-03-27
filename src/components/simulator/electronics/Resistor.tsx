@@ -3,6 +3,9 @@
 // ============================================
 // RESISTOR SVG COMPONENT
 // ============================================
+// VBL uses a simplified logic model — resistors limit current but don't
+// calculate Ohm's law values. Color bands removed to avoid implying
+// specific resistance values that aren't used in simulation.
 
 import React from "react";
 import { asResistorState } from "@/lib/types";
@@ -42,9 +45,6 @@ export const Resistor: React.FC<ResistorProps> = React.memo(
 
     const bodyWidth = Math.max(length - 16, 20);
     const bodyHeight = 8;
-
-    // Color bands (simplified - brown, red, brown = 220Ω)
-    const bandColors = ["#8B4513", "#DC2626", "#8B4513", "#FFD700"];
 
     return (
       <g
@@ -87,7 +87,7 @@ export const Resistor: React.FC<ResistorProps> = React.memo(
           strokeWidth={2}
         />
 
-        {/* Body */}
+        {/* Body - simplified beige rectangle (no color bands) */}
         <rect
           x={-bodyWidth / 2}
           y={-bodyHeight / 2}
@@ -98,18 +98,6 @@ export const Resistor: React.FC<ResistorProps> = React.memo(
           strokeWidth={1}
           rx={1}
         />
-
-        {/* Color bands */}
-        {bandColors.map((color, i) => (
-          <rect
-            key={i}
-            x={-bodyWidth / 2 + 4 + (i * (bodyWidth - 8)) / 4}
-            y={-bodyHeight / 2 + 1}
-            width={3}
-            height={bodyHeight - 2}
-            fill={color}
-          />
-        ))}
       </g>
     );
   },
