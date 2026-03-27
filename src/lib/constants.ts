@@ -246,9 +246,9 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
   npn_transistor: {
     type: 'npn_transistor',
     name: 'NPN Transistor',
-    description: 'Current amplifier — 3 pins (C/B/E)',
+    description: 'Current amplifier — 3 pins (E/B/C)',
     pinCount: 3,
-    pinTypes: ['collector', 'base', 'emitter'],
+    pinTypes: ['emitter', 'base', 'collector'],
     defaultState: { isOn: false, type: 'npn' },
     icon: '🔺',
     isLoad: false,
@@ -261,9 +261,9 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
   pnp_transistor: {
     type: 'pnp_transistor',
     name: 'PNP Transistor',
-    description: 'Current amplifier — 3 pins (C/B/E)',
+    description: 'Current amplifier — 3 pins (E/B/C)',
     pinCount: 3,
-    pinTypes: ['collector', 'base', 'emitter'],
+    pinTypes: ['emitter', 'base', 'collector'],
     defaultState: { isOn: false, type: 'pnp' },
     icon: '🔻',
     isLoad: false,

@@ -2,7 +2,8 @@
 
 // ============================================
 // TRANSISTOR SVG COMPONENT (NPN / PNP)
-// TO-92 package with 3 dynamic leads (Collector, Base, Emitter)
+// TO-92 package with 3 dynamic leads (Emitter, Base, Collector)
+// Pin order left-to-right: E - B - C
 // ============================================
 
 import React from "react";
@@ -19,31 +20,31 @@ export const Transistor: React.FC<TransistorProps> = React.memo(
     const def = COMPONENT_DEFINITIONS[component.type];
     const isNPN = def?.transistorType === "npn";
 
-    // Get 3 pin positions
-    const collectorPin = component.pins.find((p) => p.pinType === "collector");
-    const basePin = component.pins.find((p) => p.pinType === "base");
+    // Get 3 pin positions (E-B-C order: left-center-right)
     const emitterPin = component.pins.find((p) => p.pinType === "emitter");
+    const basePin = component.pins.find((p) => p.pinType === "base");
+    const collectorPin = component.pins.find((p) => p.pinType === "collector");
 
-    const collectorNode = collectorPin?.connectedNodeId
-      ? nodes.get(collectorPin.connectedNodeId)
+    const emitterNode = emitterPin?.connectedNodeId
+      ? nodes.get(emitterPin.connectedNodeId)
       : null;
     const baseNode = basePin?.connectedNodeId
       ? nodes.get(basePin.connectedNodeId)
       : null;
-    const emitterNode = emitterPin?.connectedNodeId
-      ? nodes.get(emitterPin.connectedNodeId)
+    const collectorNode = collectorPin?.connectedNodeId
+      ? nodes.get(collectorPin.connectedNodeId)
       : null;
 
-    if (!collectorNode || !baseNode || !emitterNode) return null;
+    if (!emitterNode || !baseNode || !collectorNode) return null;
 
     // Use base node as center anchor (middle pin)
     const cx = baseNode.canvasPosition.x;
     const cy = baseNode.canvasPosition.y;
 
-    // Collector is pin[0], Base is pin[1], Emitter is pin[2]
+    // Emitter is pin[0] (left), Base is pin[1] (center), Collector is pin[2] (right)
     // They sit on consecutive columns in the same row
-    const colX = collectorNode.canvasPosition.x;
     const emiX = emitterNode.canvasPosition.x;
+    const colX = collectorNode.canvasPosition.x;
 
     // TO-92 body dimensions
     const bodyRadius = 10;
@@ -60,9 +61,9 @@ export const Transistor: React.FC<TransistorProps> = React.memo(
         {/* Selection highlight */}
         {isSelected && (
           <rect
-            x={colX - 6}
+            x={emiX - 6}
             y={cy + bodyOffsetY - bodyRadius - 4}
-            width={emiX - colX + 12}
+            width={colX - emiX + 12}
             height={bodyRadius * 2 + (cy - (cy + bodyOffsetY) + bodyRadius) + 8}
             fill="none"
             stroke={COLORS.SELECTION_HIGHLIGHT}
@@ -73,11 +74,11 @@ export const Transistor: React.FC<TransistorProps> = React.memo(
         )}
 
         {/* Lead wires — vertical from pin holes up to body bottom */}
-        {/* Collector lead (left) */}
+        {/* Emitter lead (left) */}
         <line
-          x1={colX}
+          x1={emiX}
           y1={cy}
-          x2={colX}
+          x2={emiX}
           y2={cy + bodyOffsetY + bodyRadius}
           stroke={isActive ? COLORS.POWER_RAIL : "#888"}
           strokeWidth={2}
@@ -91,11 +92,11 @@ export const Transistor: React.FC<TransistorProps> = React.memo(
           stroke={isActive ? "#F59E0B" : "#888"}
           strokeWidth={2}
         />
-        {/* Emitter lead (right) */}
+        {/* Collector lead (right) */}
         <line
-          x1={emiX}
+          x1={colX}
           y1={cy}
-          x2={emiX}
+          x2={colX}
           y2={cy + bodyOffsetY + bodyRadius}
           stroke={isActive ? COLORS.POWER_RAIL : "#888"}
           strokeWidth={2}
@@ -138,28 +139,28 @@ export const Transistor: React.FC<TransistorProps> = React.memo(
 
         {/* Directional arrow */}
         {isNPN ? (
-          // NPN: Arrow pointing OUT from base toward emitter
+          // NPN: Arrow pointing OUT from base toward emitter (left side)
           <polygon
-            points={`${emiX - 2},${cy + bodyOffsetY + bodyRadius - 2} ${emiX + 2},${cy + bodyOffsetY + bodyRadius + 2} ${emiX - 4},${cy + bodyOffsetY + bodyRadius + 2}`}
+            points={`${emiX + 2},${cy + bodyOffsetY + bodyRadius - 2} ${emiX - 2},${cy + bodyOffsetY + bodyRadius + 2} ${emiX + 4},${cy + bodyOffsetY + bodyRadius + 2}`}
             fill={isActive ? "#4ADE80" : "#999"}
           />
         ) : (
-          // PNP: Arrow pointing IN toward base from emitter
+          // PNP: Arrow pointing IN toward base from emitter (left side)
           <polygon
-            points={`${emiX - 2},${cy + bodyOffsetY + bodyRadius + 2} ${emiX + 2},${cy + bodyOffsetY + bodyRadius - 2} ${emiX + 4},${cy + bodyOffsetY + bodyRadius + 2}`}
+            points={`${emiX + 2},${cy + bodyOffsetY + bodyRadius + 2} ${emiX - 2},${cy + bodyOffsetY + bodyRadius - 2} ${emiX - 4},${cy + bodyOffsetY + bodyRadius + 2}`}
             fill={isActive ? "#4ADE80" : "#999"}
           />
         )}
 
         {/* Pin labels */}
-        <text x={colX} y={cy + 8} fill="#999" fontSize="5" textAnchor="middle">
-          C
+        <text x={emiX} y={cy + 8} fill="#999" fontSize="5" textAnchor="middle">
+          E
         </text>
         <text x={cx} y={cy + 8} fill="#D97706" fontSize="5" textAnchor="middle">
           B
         </text>
-        <text x={emiX} y={cy + 8} fill="#999" fontSize="5" textAnchor="middle">
-          E
+        <text x={colX} y={cy + 8} fill="#999" fontSize="5" textAnchor="middle">
+          C
         </text>
 
         {/* Active glow */}
