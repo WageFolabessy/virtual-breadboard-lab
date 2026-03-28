@@ -14,7 +14,7 @@
 // ============================================
 
 import React from "react";
-import { CircuitComponent, SimulationResult, asSwitchState } from "@/lib/types";
+import { CircuitComponent, asSwitchState } from "@/lib/types";
 import { COMPONENT_DEFINITIONS } from "@/lib/constants";
 import {
   InfoPanel,
@@ -47,14 +47,12 @@ const PIN_DISPLAY_NAMES: Record<string, string> = {
 
 interface ComponentInfoPanelProps {
   component: CircuitComponent;
-  simulation: SimulationResult;
   onToggleSwitch: (componentId: string) => void;
   onDelete: (componentId: string) => void;
 }
 
 export const ComponentInfoPanel: React.FC<ComponentInfoPanelProps> = ({
   component,
-  simulation,
   onToggleSwitch,
   onDelete,
 }) => {
@@ -80,7 +78,6 @@ export const ComponentInfoPanel: React.FC<ComponentInfoPanelProps> = ({
         {/* TRAIT-DRIVEN: Component-specific state info */}
         <TraitDrivenStateInfo
           component={component}
-          simulation={simulation}
           onToggleSwitch={onToggleSwitch}
         />
 
@@ -101,13 +98,11 @@ export const ComponentInfoPanel: React.FC<ComponentInfoPanelProps> = ({
 
 interface TraitDrivenStateInfoProps {
   component: CircuitComponent;
-  simulation: SimulationResult;
   onToggleSwitch: (componentId: string) => void;
 }
 
 const TraitDrivenStateInfo: React.FC<TraitDrivenStateInfoProps> = ({
   component,
-  simulation,
   onToggleSwitch,
 }) => {
   const def = COMPONENT_DEFINITIONS[component.type];

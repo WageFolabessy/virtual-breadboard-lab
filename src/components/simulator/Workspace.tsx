@@ -457,7 +457,6 @@ export const Workspace: React.FC = () => {
           {selectedComponent && (
             <ComponentInfoPanel
               component={selectedComponent}
-              simulation={simulation}
               onToggleSwitch={toggleSwitch}
               onDelete={removeComponent}
             />
