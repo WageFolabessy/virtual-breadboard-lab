@@ -109,14 +109,13 @@ const DeleteIcon = () => (
 );
 
 export const Toolbar: React.FC = () => {
-  const { selectedTool, setSelectedTool, simulation } =
-    useCircuitStore(
-      useShallow((state) => ({
-        selectedTool: state.selectedTool,
-        setSelectedTool: state.setSelectedTool,
-        simulation: state.simulation,
-      })),
-    );
+  const { selectedTool, setSelectedTool, simulation } = useCircuitStore(
+    useShallow((state) => ({
+      selectedTool: state.selectedTool,
+      setSelectedTool: state.setSelectedTool,
+      simulation: state.simulation,
+    })),
+  );
 
   // Keyboard shortcuts extracted to hook
   useKeyboardShortcuts();
@@ -125,7 +124,7 @@ export const Toolbar: React.FC = () => {
     <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
       <div className="flex items-center justify-between">
         {/* Left side - Tools */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 overflow-x-auto hide-scrollbar pb-1 -mb-1">
           <ToolButton
             tool="select"
             icon={<SelectIcon />}
@@ -154,7 +153,7 @@ export const Toolbar: React.FC = () => {
         </div>
 
         {/* Right side - Circuit Status */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 shrink-0 ml-4">
           <StatusBadge status={simulation.status} />
         </div>
       </div>

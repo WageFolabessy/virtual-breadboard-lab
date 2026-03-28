@@ -44,7 +44,7 @@ const ComponentCard: React.FC<ComponentCardProps> = ({
       onClick={onClick}
       title={`${name} — ${description}`}
       className={`
-        w-full p-3 rounded-lg border-2 transition-all duration-200 text-left cursor-pointer
+        flex items-center gap-2 p-2.5 lg:p-3 rounded-lg border-2 transition-all duration-200 cursor-pointer shrink-0
         ${
           isSelected
             ? "border-blue-500 bg-blue-50 shadow-md"
@@ -52,14 +52,12 @@ const ComponentCard: React.FC<ComponentCardProps> = ({
         }
       `}
     >
-      <div className="flex items-center gap-3">
-        <span className="text-2xl" role="img" aria-label={name}>
-          {icon}
-        </span>
-        <div className="flex-1 min-w-0">
-          <h3 className="font-semibold text-gray-800 text-sm">{name}</h3>
-          <p className="text-xs text-gray-500 truncate">{description}</p>
-        </div>
+      <span className="text-xl lg:text-2xl" role="img" aria-label={name}>
+        {icon}
+      </span>
+      <div className="hidden lg:block flex-1 min-w-0 text-left">
+        <h3 className="font-semibold text-gray-800 text-sm">{name}</h3>
+        <p className="text-xs text-gray-500 truncate">{description}</p>
       </div>
     </button>
   );
@@ -116,11 +114,11 @@ export const ComponentLibrary: React.FC = () => {
 
   return (
     <div
-      className="w-full lg:w-64 bg-gray-50 border-b lg:border-b-0 lg:border-r border-gray-200 flex flex-col max-h-48 lg:max-h-full lg:h-full overflow-hidden"
+      className="w-full lg:w-64 bg-gray-50 border-b lg:border-b-0 lg:border-r border-gray-200 flex flex-col shrink-0 overflow-hidden"
       data-tour="component-library"
     >
       {/* Header */}
-      <div className="p-4 border-b border-gray-200 bg-white">
+      <div className="hidden lg:block p-4 border-b border-gray-200 bg-white shrink-0">
         <h2 className="text-lg font-bold text-gray-800">Components</h2>
         <p className="text-xs text-gray-500 mt-1">
           Click to place on breadboard
@@ -128,14 +126,21 @@ export const ComponentLibrary: React.FC = () => {
       </div>
 
       {/* Component List — Dynamically grouped by category */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex flex-row lg:flex-col overflow-x-auto lg:overflow-x-hidden overflow-y-hidden lg:overflow-y-auto p-2 lg:p-4 gap-2 lg:space-y-4 items-center lg:items-stretch hide-scrollbar">
         {CATEGORY_ORDER.map((category) => {
           const componentsInCategory = componentsByCategory[category];
           if (componentsInCategory.length === 0) return null;
 
           return (
-            <div key={category} className="space-y-2">
-              <SectionHeader>{CATEGORY_DISPLAY_NAMES[category]}</SectionHeader>
+            <div
+              key={category}
+              className="flex flex-row lg:flex-col gap-2 lg:space-y-2 shrink-0"
+            >
+              <div className="hidden lg:block">
+                <SectionHeader>
+                  {CATEGORY_DISPLAY_NAMES[category]}
+                </SectionHeader>
+              </div>
               {componentsInCategory.map((type) => {
                 const def = COMPONENT_DEFINITIONS[type];
                 if (!def) return null;
@@ -156,9 +161,11 @@ export const ComponentLibrary: React.FC = () => {
         })}
 
         {/* Colors */}
-        <div className="pt-4 border-t border-gray-200">
-          <SectionHeader className="mb-3">Color</SectionHeader>
-          <div className="flex flex-wrap gap-2">
+        <div className="flex flex-row lg:flex-col items-center lg:items-stretch lg:pt-4 lg:border-t border-gray-200 shrink-0 ml-2 lg:ml-0 pl-2 border-l lg:border-l-0 lg:pl-0">
+          <div className="hidden lg:block mb-3">
+            <SectionHeader>Color</SectionHeader>
+          </div>
+          <div className="flex flex-row lg:flex-wrap gap-2">
             {COLOR_PALETTE.map((option) => (
               <ColorSwatchButton
                 key={option.value}

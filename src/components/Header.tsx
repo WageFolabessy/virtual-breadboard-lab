@@ -23,7 +23,13 @@ export const Header: React.FC = () => {
   const [isCopied, setIsCopied] = useState(false);
 
   // AGENTS.MD COMPLIANCE: Use useShallow for consistency (functions have stable refs, but this maintains pattern consistency)
-  const { exportCircuit, importCircuit, clearAll, copyCircuitToClipboard, pasteCircuitFromClipboard } = useCircuitStore(
+  const {
+    exportCircuit,
+    importCircuit,
+    clearAll,
+    copyCircuitToClipboard,
+    pasteCircuitFromClipboard,
+  } = useCircuitStore(
     useShallow((state) => ({
       exportCircuit: state.exportCircuit,
       importCircuit: state.importCircuit,
@@ -95,8 +101,8 @@ export const Header: React.FC = () => {
   }, [pasteCircuitFromClipboard]);
 
   return (
-    <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between shrink-0">
-      <div className="flex items-center gap-3">
+    <header className="bg-white border-b border-gray-200 px-4 md:px-6 py-3 flex flex-col md:flex-row md:items-center justify-between gap-3 shrink-0">
+      <div className="flex items-center gap-3 shrink-0">
         <Image
           src={logo}
           alt="Virtual Breadboard Lab Logo"
@@ -121,7 +127,7 @@ export const Header: React.FC = () => {
       </div>
 
       {/* Action Buttons - Using extracted ActionButton component */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-1 md:pb-0 hide-scrollbar">
         {/* Clipboard Actions */}
         <ActionButton
           icon={isCopied ? <CheckIcon /> : <CopyIcon />}

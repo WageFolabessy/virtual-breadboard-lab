@@ -231,14 +231,14 @@ export const Workspace: React.FC = () => {
       <OnboardingTour />
 
       {/* Main Content Area - Mobile: stacked, Desktop: 3-column */}
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative">
         {/* Left Sidebar */}
         <ComponentLibrary />
 
         {/* Tour target wrapper - NO overflow:hidden to prevent Joyride clipping */}
         <div
           data-tour="breadboard"
-          className="flex-1 flex flex-col lg:flex-row min-h-[50vh] lg:min-h-0"
+          className="flex-1 flex flex-col lg:flex-row min-h-0"
         >
           {/* Main Canvas Area — infinite-canvas with pan/zoom */}
           <div
@@ -430,17 +430,28 @@ export const Workspace: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Panel - Info/Properties - Hidden on mobile, shown on desktop */}
+        {/* Right Panel - Info/Properties - Overlay on mobile, shown on desktop */}
         <div
-          className="hidden lg:block w-64 bg-gray-50 border-l border-gray-200 p-4 overflow-y-auto"
+          className={`
+            ${selectedComponent || selectedWire ? "flex" : "hidden"} 
+            lg:flex lg:w-64 bg-gray-50 lg:border-l border-gray-200 lg:p-4 overflow-y-auto
+            absolute bottom-0 left-0 right-0 z-20 max-h-[45vh] shadow-[0_-4px_15px_rgba(0,0,0,0.1)] rounded-t-2xl px-4 py-2 flex-col
+            lg:relative lg:max-h-full lg:shadow-none lg:rounded-none lg:flex-col
+          `}
           data-tour="circuit-info"
         >
-          <h2 className="text-lg font-bold text-gray-800 mb-4">Circuit Info</h2>
+          {/* Mobile grab handle */}
+          <div className="w-12 h-1.5 bg-gray-300 rounded-full mx-auto mb-2 shrink-0 lg:hidden" />
 
-          <StatusIndicator
-            status={simulation.status}
-            message={simulation.message}
-          />
+          <div className="hidden lg:block">
+            <h2 className="text-lg font-bold text-gray-800 mb-4">
+              Circuit Info
+            </h2>
+            <StatusIndicator
+              status={simulation.status}
+              message={simulation.message}
+            />
+          </div>
 
           {/* Selected Component Info - Using extracted panel component */}
           {selectedComponent && (
