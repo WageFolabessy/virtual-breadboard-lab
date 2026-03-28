@@ -240,7 +240,7 @@ export const COMPONENT_DEFINITIONS: Record<string, ComponentDefinition> = {
     icon: '▶',
     isLoad: false,
     isPolarized: true,
-    isConductive: false,
+    isConductive: true,
     isPowerSource: false,
     category: 'output',
   },
