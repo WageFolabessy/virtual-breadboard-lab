@@ -27,12 +27,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL("https://vbl.eproject.tech"),
   title: {
-    default:
-      "Virtual Breadboard Lab - Free Online Circuit Simulator | Simulator Elektronika Gratis",
+    default: "Virtual Breadboard Lab | Free Circuit Simulator",
     template: "%s | Virtual Breadboard Lab",
   },
   description:
-    "Free interactive breadboard simulator. Design, test, and learn electronic circuits, logic gates, and 555 Timer ICs directly in your browser. No installation required. / Simulator elektronika online gratis dari Cangkir untuk belajar sirkuit digital dan IC Timer 555.",
+    "Free interactive virtual breadboard simulator. Design and test electronic circuits, logic gates, and ICs in your browser. Simulator elektronika gratis.",
   keywords: [
     // English (Global SEO)
     "free online circuit simulator",
@@ -68,10 +67,9 @@ export const metadata: Metadata = {
     alternateLocale: ["id_ID"],
     url: "https://vbl.eproject.tech",
     siteName: "Virtual Breadboard Lab",
-    title:
-      "Virtual Breadboard Lab - Free Online Circuit Simulator | Simulator Elektronika Gratis",
+    title: "Virtual Breadboard Lab | Free Circuit Simulator",
     description:
-      "Free interactive breadboard simulator. Design, test, and learn electronic circuits, logic gates, and 555 Timer ICs directly in your browser. No installation required. / Simulator elektronika online gratis dari Cangkir.",
+      "Free interactive virtual breadboard simulator. Design and test electronic circuits, logic gates, and ICs in your browser. Simulator elektronika gratis.",
     images: [
       {
         url: "/og.png",
@@ -83,10 +81,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title:
-      "Virtual Breadboard Lab - Free Online Circuit Simulator | Simulator Elektronika Gratis",
+    title: "Virtual Breadboard Lab | Free Circuit Simulator",
     description:
-      "Design, test, and learn electronic circuits directly in your browser. No installation required. / Simulator elektronika online gratis dari Cangkir.",
+      "Free interactive virtual breadboard simulator. Design and test electronic circuits, logic gates, and ICs in your browser. Simulator elektronika gratis.",
     images: ["/og.png"],
     creator: "@cangkir_tech",
     site: "@cangkir_tech",
