@@ -14,18 +14,14 @@
 // ============================================
 
 import React from "react";
-import {
-  CircuitComponent,
-  SimulationResult,
-  asBatteryState,
-  asLEDState,
-  asSwitchState,
-  asResistorState,
-  asCapacitorState,
-  asBuzzerState,
-} from "@/lib/types";
+import { CircuitComponent, SimulationResult, asSwitchState } from "@/lib/types";
 import { COMPONENT_DEFINITIONS } from "@/lib/constants";
-import { InfoPanel, PropertyRow, DeleteButton, PanelButton } from "@/components/ui";
+import {
+  InfoPanel,
+  PropertyRow,
+  DeleteButton,
+  PanelButton,
+} from "@/components/ui";
 
 // ---- Pin Display Names (derived from pin types) ----
 // This could be moved to COMPONENT_DEFINITIONS if needed
@@ -118,80 +114,10 @@ const TraitDrivenStateInfo: React.FC<TraitDrivenStateInfoProps> = ({
   if (!def) return null;
 
   const componentState = component.state as Record<string, unknown>;
-  const simState = simulation.componentStates.get(component.id);
   const stateItems: React.ReactNode[] = [];
 
-  // ---- TRAIT: isPowerSource → Show voltage ----
-  if (def.isPowerSource) {
-    const batteryState = asBatteryState(component.state);
-    if (batteryState) {
-      stateItems.push(
-        <StateRow key="voltage" label="Voltage" value={`${batteryState.voltage}V`} />
-      );
-    }
-  }
-
-  // ---- TRAIT: isLoad → Show active state from simulation ----
-  if (def.isLoad && simState) {
-    // Check for LED-specific state (isLit)
-    const ledState = asLEDState(simState);
-    if (ledState) {
-      stateItems.push(
-        <StateRow
-          key="led-state"
-          label="State"
-          value={ledState.isLit ? "ON" : "OFF"}
-          valueClass={ledState.isLit ? "text-green-600" : "text-gray-400"}
-        />
-      );
-    }
-
-    // Check for Buzzer-specific state (isActive)
-    const buzzerState = asBuzzerState(simState);
-    if (buzzerState) {
-      stateItems.push(
-        <StateRow
-          key="buzzer-state"
-          label="State"
-          value={buzzerState.isActive ? "BUZZING" : "SILENT"}
-          valueClass={buzzerState.isActive ? "text-yellow-600" : "text-gray-400"}
-        />
-      );
-    }
-  }
-
-  // ---- STATE: resistance → Show resistance value ----
-  if ('resistance' in componentState) {
-    const resistorState = asResistorState(component.state);
-    if (resistorState) {
-      stateItems.push(
-        <StateRow key="resistance" label="Resistance" value={`${resistorState.resistance}Ω`} />
-      );
-    }
-  }
-
-  // ---- STATE: capacitance → Show capacitance value ----
-  if ('capacitance' in componentState) {
-    const capacitorState = asCapacitorState(component.state);
-    if (capacitorState) {
-      stateItems.push(
-        <StateRow key="capacitance" label="Capacitance" value={`${capacitorState.capacitance}µF`} />
-      );
-    }
-  }
-
-  // ---- STATE: frequency (buzzer) → Show frequency value ----
-  if ('frequency' in componentState) {
-    const buzzerComponentState = asBuzzerState(component.state);
-    if (buzzerComponentState) {
-      stateItems.push(
-        <StateRow key="frequency" label="Frequency" value={`${buzzerComponentState.frequency} Hz`} />
-      );
-    }
-  }
-
   // ---- TRAIT: isToggleable → Show switch state + toggle button ----
-  if (def.isToggleable && 'isClosed' in componentState) {
+  if (def.isToggleable && "isClosed" in componentState) {
     const switchState = asSwitchState(component.state);
     if (switchState) {
       stateItems.push(
@@ -200,7 +126,7 @@ const TraitDrivenStateInfo: React.FC<TraitDrivenStateInfoProps> = ({
           label="State"
           value={switchState.isClosed ? "CLOSED" : "OPEN"}
           valueClass={switchState.isClosed ? "text-green-600" : "text-gray-400"}
-        />
+        />,
       );
       stateItems.push(
         <PanelButton
@@ -208,7 +134,7 @@ const TraitDrivenStateInfo: React.FC<TraitDrivenStateInfoProps> = ({
           onClick={() => onToggleSwitch(component.id)}
           label="Toggle Switch"
           variant="primary"
-        />
+        />,
       );
     }
   }
@@ -223,7 +149,11 @@ interface StateRowProps {
   valueClass?: string;
 }
 
-const StateRow: React.FC<StateRowProps> = ({ label, value, valueClass = "text-gray-900 font-medium" }) => (
+const StateRow: React.FC<StateRowProps> = ({
+  label,
+  value,
+  valueClass = "text-gray-900 font-medium",
+}) => (
   <p>
     <span className="text-gray-500">{label}:</span>{" "}
     <span className={valueClass}>{value}</span>

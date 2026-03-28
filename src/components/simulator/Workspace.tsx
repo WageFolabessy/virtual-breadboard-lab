@@ -14,7 +14,12 @@
 // 6. Component rendering uses registry pattern (no hardcoded type checks)
 // ============================================
 
-import React, { useSyncExternalStore, useMemo, useCallback } from "react";
+import React, {
+  useSyncExternalStore,
+  useMemo,
+  useCallback,
+  useRef,
+} from "react";
 import {
   useCircuitStore,
   getWireDrawingState,
@@ -147,6 +152,13 @@ export const Workspace: React.FC = () => {
   }, []);
   const isComponentActive = useComponentActiveChecker(components, activeNodes);
   useSimulationTicker(); // Advances 555 Timer clock every 500ms
+
+  // Pending drag ref: tracks pointerDown start position for drag threshold
+  const pendingDragRef = useRef<{
+    componentId: string;
+    startX: number;
+    startY: number;
+  } | null>(null);
 
   const {
     containerRef: panZoomContainerRef,
@@ -304,7 +316,32 @@ export const Workspace: React.FC = () => {
                         onPointerDown={(e) => {
                           if (selectedTool === "select" && !movingComponentId) {
                             e.stopPropagation();
+                            // Record pending drag — don't lift yet, wait for movement threshold
+                            pendingDragRef.current = {
+                              componentId: component.id,
+                              startX: e.clientX,
+                              startY: e.clientY,
+                            };
+                          }
+                        }}
+                        onPointerMove={(e) => {
+                          const pending = pendingDragRef.current;
+                          if (!pending || pending.componentId !== component.id)
+                            return;
+                          const dx = e.clientX - pending.startX;
+                          const dy = e.clientY - pending.startY;
+                          // Only start drag after exceeding 5px movement threshold
+                          if (Math.sqrt(dx * dx + dy * dy) > 5) {
+                            pendingDragRef.current = null;
                             liftComponent(component.id);
+                          }
+                        }}
+                        onPointerUp={() => {
+                          // If pointerUp fires before threshold → it was a click, not a drag
+                          if (
+                            pendingDragRef.current?.componentId === component.id
+                          ) {
+                            pendingDragRef.current = null;
                           }
                         }}
                         style={{

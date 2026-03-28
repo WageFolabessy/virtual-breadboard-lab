@@ -125,12 +125,24 @@ const safeStorage: StateStorage = {
 };
 
 // ---- SERIALIZATION HELPERS ----
+// Keys that are purely numerical display values and not used by the engine
+const NUMERICAL_DISPLAY_KEYS = new Set(['voltage', 'resistance', 'capacitance', 'frequency']);
+
 function serializeComponent(component: CircuitComponent): SerializedComponent {
+  // Strip numerical display values from exported state
+  const rawState = component.state as Record<string, unknown>;
+  const cleanState: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(rawState)) {
+    if (!NUMERICAL_DISPLAY_KEYS.has(key)) {
+      cleanState[key] = value;
+    }
+  }
+  
   return {
     id: component.id,
     type: component.type,
     pinNodeIds: component.pins.map(p => p.connectedNodeId),
-    state: component.state as Record<string, unknown>,
+    state: cleanState,
   };
 }
 

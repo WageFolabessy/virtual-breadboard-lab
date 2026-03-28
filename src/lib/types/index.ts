@@ -51,7 +51,7 @@ export interface CircuitComponent {
 
 // Component-specific state types
 export interface BatteryState {
-  voltage: number;
+  voltage?: number;
   isOn: boolean;
 }
 
@@ -61,7 +61,7 @@ export interface LEDState {
 }
 
 export interface ResistorState {
-  resistance: number;  // in Ohms
+  resistance?: number;  // in Ohms
 }
 
 export interface SwitchState {
@@ -69,12 +69,12 @@ export interface SwitchState {
 }
 
 export interface CapacitorState {
-  capacitance: number;  // in microfarads (µF)
+  capacitance?: number;  // in microfarads (µF)
 }
 
 export interface BuzzerState {
   isActive: boolean;
-  frequency: number;  // in Hz
+  frequency?: number;  // in Hz
 }
 
 export interface DiodeState {
@@ -221,7 +221,7 @@ export interface ComponentDragEvent {
 // Eliminates unsafe inline `as` casts throughout the codebase.
 
 export function asBatteryState(state: ComponentState): BatteryState | null {
-  if (state && 'voltage' in state && 'isOn' in state) return state as BatteryState;
+  if (state && 'isOn' in state) return state as BatteryState;
   return null;
 }
 
@@ -231,8 +231,7 @@ export function asLEDState(state: ComponentState): LEDState | null {
 }
 
 export function asResistorState(state: ComponentState): ResistorState | null {
-  if (state && 'resistance' in state) return state as ResistorState;
-  return null;
+  return state ? (state as ResistorState) : null;
 }
 
 export function asSwitchState(state: ComponentState): SwitchState | null {
@@ -241,12 +240,11 @@ export function asSwitchState(state: ComponentState): SwitchState | null {
 }
 
 export function asCapacitorState(state: ComponentState): CapacitorState | null {
-  if (state && 'capacitance' in state) return state as CapacitorState;
-  return null;
+  return state ? (state as CapacitorState) : null;
 }
 
 export function asBuzzerState(state: ComponentState): BuzzerState | null {
-  if (state && 'isActive' in state && 'frequency' in state) return state as BuzzerState;
+  if (state && 'isActive' in state) return state as BuzzerState;
   return null;
 }
 
@@ -261,11 +259,11 @@ export function asTransistorState(state: ComponentState): TransistorState | null
 }
 
 export function asIC555State(state: ComponentState): IC555State | null {
-  if (state && 'isActive' in state && !('frequency' in state) && !('isOn' in state)) return state as IC555State;
+  if (state && 'isActive' in state && 'clockState' in state) return state as IC555State;
   return null;
 }
 
 export function asTactileButtonState(state: ComponentState): TactileButtonState | null {
-  if (state && 'isActive' in state && !('frequency' in state) && !('clockState' in state) && !('isOn' in state)) return state as TactileButtonState;
+  if (state && 'isActive' in state) return state as TactileButtonState;
   return null;
 }

@@ -117,18 +117,6 @@ export const Battery: React.FC<BatteryProps> = React.memo(
         >
           -
         </text>
-
-        {/* Voltage label */}
-        <text
-          x={0}
-          y={1}
-          fill="#fff"
-          fontSize="8"
-          textAnchor="middle"
-          dominantBaseline="middle"
-        >
-          {state.voltage}V
-        </text>
       </g>
     );
   },

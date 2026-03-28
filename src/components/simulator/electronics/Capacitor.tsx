@@ -115,17 +115,6 @@ export const Capacitor: React.FC<CapacitorProps> = React.memo(
         >
           +
         </text>
-
-        {/* Value label */}
-        <text
-          x={0}
-          y={plateHeight / 2 + 10}
-          fill="#666"
-          fontSize="8"
-          textAnchor="middle"
-        >
-          {state.capacitance}µF
-        </text>
       </g>
     );
   },
