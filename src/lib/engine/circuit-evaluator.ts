@@ -247,30 +247,18 @@ function componentConducts(
   component: CircuitComponent,
   cache: Map<string, string[]>,
   positiveReachable?: Set<string>,
-  negativeReachable?: Set<string>
+  negativeReachable?: Set<string>,
+  transistorState?: Map<string, boolean>
 ): boolean {
   const def = getDefinition(component.type);
   
   // ---- TRANSISTOR CONDUCTIVITY (Dynamic Switching) ----
-  // Transistors have isConductive=false in their definition, but can
-  // conduct DYNAMICALLY when their base pin is at the correct voltage.
-  // Uses trait-driven check via transistorType instead of hardcoded type strings.
   if (def.transistorType) {
-    // Without voltage context (first pass), transistors don't conduct
-    if (!positiveReachable || !negativeReachable) return false;
-    
-    const basePin = component.pins.find(p => p.pinType === 'base');
-    if (!basePin?.connectedNodeId) return false;
-    
-    const baseGroup = cache.get(basePin.connectedNodeId) || [basePin.connectedNodeId];
-    
-    if (def.transistorType === 'npn') {
-      // NPN: Base must be POSITIVE → Collector-to-Emitter conducts
-      return baseGroup.some(n => positiveReachable.has(n));
-    } else {
-      // PNP: Base must be NEGATIVE → Emitter-to-Collector conducts
-      return baseGroup.some(n => negativeReachable.has(n));
+    if (transistorState) {
+      return transistorState.get(component.id) || false;
     }
+    // Fallback if no explicit state provided (should not happen in v7.3)
+    return false;
   }
   
   // Non-conductive components never pass current
@@ -328,7 +316,8 @@ function floodFill(
   positiveCtx?: Set<string>,
   negativeCtx?: Set<string>,
   initialStrength: CurrentStrength = 'strong',
-  oppositeStrongNodes?: Set<string>
+  oppositeStrongNodes?: Set<string>,
+  transistorState?: Map<string, boolean>
 ): FloodFillResult {
   // Track strong and weak reachable nodes separately
   const strongReachable = new Set<string>();
@@ -411,7 +400,7 @@ function floodFill(
       const { component, pinType, otherPinNodeIds } = conn;
       
       // Skip non-conducting components (open switches, inactive transistors, etc.)
-      if (!componentConducts(component, cache, positiveCtx, negativeCtx)) continue;
+      if (!componentConducts(component, cache, positiveCtx, negativeCtx, transistorState)) continue;
       
       // POLARITY CHECK (trait-driven: applies to any isPolarized component)
       const def = getDefinition(component.type);
@@ -471,8 +460,30 @@ function floodFill(
         continue; // Skip generic traversal for this component
       }
       
-      // Add all nodes on the other side of the component with computed output strength
-      for (const otherNodeId of otherPinNodeIds) {
+      // ---- PIN ROUTING RULES (v7.3) ----
+      let targetNodeIds: string[] = [];
+      const compDef = getDefinition(component.type);
+      
+      if (compDef.transistorType) {
+        // Transistors: Current flows purely between Collector and Emitter in idealized model.
+        // Base acts as a sensor and does not pass structural current.
+        let targetType: string | null = null;
+        if (pinType === 'collector') targetType = 'emitter';
+        else if (pinType === 'emitter') targetType = 'collector';
+        
+        if (targetType) {
+          const targetPin = component.pins.find(p => p.pinType === targetType);
+          if (targetPin?.connectedNodeId) {
+            targetNodeIds = cache.get(targetPin.connectedNodeId) || [targetPin.connectedNodeId];
+          }
+        }
+      } else {
+        // Default: all other connected pins
+        targetNodeIds = otherPinNodeIds;
+      }
+      
+      // Add all permitted nodes on the other side of the component
+      for (const otherNodeId of targetNodeIds) {
         const otherGroup = cache.get(otherNodeId) || [otherNodeId];
         for (const nodeId of otherGroup) {
           if (addNode(nodeId, outputStrength)) {
@@ -716,64 +727,114 @@ export function evaluateCircuit(
   let positiveReachable = new Set<string>();
   let negativeReachable = new Set<string>();
   
-  const MAX_STABILIZATION_PASSES = 10;
+  // Transistor Dynamic State (Asynchronous Relaxation for zero-delay feedback loops)
+  // Explictly tracks state to avoid synchronous symmetrical oscillations
+  const transistorState = new Map<string, boolean>();
+  for (const comp of components) {
+    if (getDefinition(comp.type).transistorType) {
+      // CRITICAL FOR MEMORY CIRCUITS (Flip-Flops/Latches):
+      // Seed the relaxation solver with the transistor's LAST KNOWN STATE.
+      const prevState = comp.state as Record<string, unknown>;
+      transistorState.set(comp.id, prevState.isOn === true);
+    }
+  }
   
-  for (let pass = 0; pass < MAX_STABILIZATION_PASSES; pass++) {
-    // Flood from POSITIVE (forward direction) — passing current context for transistor checks
-    // FIX: Pass previous pass's strongNegativeNodes to sink positive current and prevent downstream propagation
-    const posResult = floodFill(
-      initialPositiveSeeds,
-      wireAdjacency,
-      componentAdjacency,
-      connectionCache,
-      'forward',
-      positiveReachable,  // Previous pass context (combined for transistor checks)
-      negativeReachable,
-      'strong', // Start with strong current from battery
-      strongNegativeNodes
-    );
+  const MAX_OUTER_PASSES = 15;
+  const MAX_INNER_VPASSES = 5;
+  
+  for (let outerPass = 0; outerPass < MAX_OUTER_PASSES; outerPass++) {
+    // --- INNER VOLTAGE LOOP ---
+    // Settles the electrical voltage paths for the CURRENT transistorState.
+    // This is required because 'oppositeStrongNodes' blocking needs 2-3 passes
+    // to correctly block "phantom" weak positive voltage flowing downstream of
+    // recently grounded nodes. Without this inner settling, transistors would
+    // blindly flip state based on phantom voltage measurements.
+    let setsChanged = false;
     
-    // Flood from NEGATIVE (backward direction)
-    // Use UPDATED positive sets for PNP base checks
-    const currentPositiveCombined = new Set([...posResult.strong, ...posResult.weak]);
-    // FIX: Pass current pass's strong positive nodes to sink negative current
-    const negResult = floodFill(
-      initialNegativeSeeds,
-      wireAdjacency,
-      componentAdjacency,
-      connectionCache,
-      'backward',
-      currentPositiveCombined,  // Use UPDATED positive set for PNP base checks
-      negativeReachable,
-      'strong', // Start with strong current from battery
-      posResult.strong
-    );
-    
-    // === STRONG OVERRIDE RESOLUTION (v7.2: Inside Stabilization Loop) ===
-    // Pull-DOWN: Strong negative annihilates weak positive (sink to GND)
-    for (const node of negResult.strong) {
-      posResult.weak.delete(node);
+    for (let vPass = 0; vPass < MAX_INNER_VPASSES; vPass++) {
+      const posResult = floodFill(
+        initialPositiveSeeds,
+        wireAdjacency,
+        componentAdjacency,
+        connectionCache,
+        'forward',
+        positiveReachable,
+        negativeReachable,
+        'strong',
+        strongNegativeNodes,
+        transistorState
+      );
+      
+      const currentPositiveCombined = new Set([...posResult.strong, ...posResult.weak]);
+      
+      const negResult = floodFill(
+        initialNegativeSeeds,
+        wireAdjacency,
+        componentAdjacency,
+        connectionCache,
+        'backward',
+        currentPositiveCombined,
+        negativeReachable,
+        'strong',
+        posResult.strong,
+        transistorState
+      );
+      
+      // === STRONG OVERRIDE RESOLUTION ===
+      for (const node of negResult.strong) {
+        posResult.weak.delete(node);
+      }
+      for (const node of posResult.strong) {
+        negResult.weak.delete(node);
+      }
+      
+      const stablePositiveCombined = new Set([...posResult.strong, ...posResult.weak]);
+      const stableNegativeCombined = new Set([...negResult.strong, ...negResult.weak]);
+      
+      setsChanged = stablePositiveCombined.size !== positiveReachable.size ||
+                    stableNegativeCombined.size !== negativeReachable.size;
+      
+      strongPositiveNodes = posResult.strong;
+      strongNegativeNodes = negResult.strong;
+      positiveReachable = stablePositiveCombined;
+      negativeReachable = stableNegativeCombined;
+      
+      if (!setsChanged) break; // Voltages have perfectly settled for this pass
     }
-    // Pull-UP: Strong positive annihilates weak negative (sink to VCC)
-    for (const node of posResult.strong) {
-      negResult.weak.delete(node);
+    
+    // --- OUTER LOOP: ASYNCHRONOUS RELAXATION CHECK ---
+    // Now that we have TRUE steady-state voltage paths, determine which transistors
+    // should switch state.
+    let transistorChanged = false;
+    for (const comp of components) {
+      const def = getDefinition(comp.type);
+      if (def.transistorType) {
+        const basePin = comp.pins.find(p => p.pinType === 'base');
+        if (!basePin?.connectedNodeId) continue;
+        
+        const baseGroup = connectionCache.get(basePin.connectedNodeId) || [basePin.connectedNodeId];
+        let shouldBeOn = false;
+        
+        if (def.transistorType === 'npn') {
+          shouldBeOn = baseGroup.some(n => positiveReachable.has(n));
+        } else {
+          shouldBeOn = baseGroup.some(n => negativeReachable.has(n));
+        }
+        
+        if (transistorState.get(comp.id) !== shouldBeOn) {
+          transistorState.set(comp.id, shouldBeOn);
+          transistorChanged = true;
+          // CRITICAL: Only allow ONE transistor to change state per outer pass!
+          // This breaks mathematical symmetry in idealized bistable circuits.
+          break; 
+        }
+      }
     }
     
-    // Compute stable combined sets for stabilization check
-    const stablePositiveCombined = new Set([...posResult.strong, ...posResult.weak]);
-    const stableNegativeCombined = new Set([...negResult.strong, ...negResult.weak]);
-    
-    // Check if sets have stabilized (no new nodes energized or overridden)
-    const hasChanged = stablePositiveCombined.size !== positiveReachable.size ||
-                       stableNegativeCombined.size !== negativeReachable.size;
-    
-    // Update all tracking sets
-    strongPositiveNodes = posResult.strong;
-    strongNegativeNodes = negResult.strong;
-    positiveReachable = stablePositiveCombined;
-    negativeReachable = stableNegativeCombined;
-    
-    if (!hasChanged) break; // Stable — no transistors changed state
+    // If NO transistors wanted to change state this pass, the entire circuit is fully stable!
+    if (!transistorChanged) {
+      break; 
+    }
   }
   
   // === POST-FLOOD-FILL SHORT CIRCUIT DETECTION (v7.0: Strong-Only Check) ===
@@ -833,7 +894,7 @@ export function evaluateCircuit(
     // they can still be "active" based on voltage potential - isConductive only
     // affects flood-fill traversal, not activation evaluation.
     const def = getDefinition(component.type);
-    if (def.isConductive && !componentConducts(component, connectionCache, positiveReachable, negativeReachable)) continue;
+    if (def.isConductive && !componentConducts(component, connectionCache, positiveReachable, negativeReachable, transistorState)) continue;
     
     const pins = component.pins.filter(p => p.connectedNodeId);
     if (pins.length < 2) continue;
@@ -895,6 +956,16 @@ export function evaluateCircuit(
         if ('isActive' in activeState) activeState.isActive = true;
         result.componentStates.set(component.id, activeState as ComponentState);
       }
+    }
+  }
+  
+  // === SAVE EVALUATED TRANSISTOR STATES TO PERSIST MEMORY ACROSS FRAMES ===
+  for (const [compId, isOn] of transistorState.entries()) {
+    const component = components.find(c => c.id === compId);
+    if (component) {
+      const currentState = result.componentStates.get(compId) || { ...component.state as Record<string, unknown> };
+      const newState = { ...currentState, isOn };
+      result.componentStates.set(compId, newState as ComponentState);
     }
   }
   

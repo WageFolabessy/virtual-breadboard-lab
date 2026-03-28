@@ -984,11 +984,43 @@ export const useCircuitStore = create<CircuitStore>()(
         const result = evaluateCircuit(state.nodes, state.components, state.wires);
         const newActiveNodes = getActiveNodes(result.activePath, state.nodes);
         
+        // === STATE WRITE-BACK (Critical for Memory Circuits) ===
+        // The evaluator computes transistor isOn states via Asynchronous Relaxation,
+        // but stores them in result.componentStates (a temporary Map).
+        // We MUST write these states back to the actual component objects in the store
+        // so that the NEXT evaluation frame can read the previous transistor states
+        // as seeds for the relaxation solver. Without this, flip-flops/latches
+        // lose their memory every frame and cannot latch.
+        let componentsUpdated = false;
+        const updatedComponents = state.components.map(comp => {
+          const evaluatedState = result.componentStates.get(comp.id);
+          if (!evaluatedState) return comp;
+          
+          const currentState = comp.state as Record<string, unknown>;
+          const newState = evaluatedState as Record<string, unknown>;
+          
+          // Check if any state property actually changed
+          let changed = false;
+          for (const key of Object.keys(newState)) {
+            if (currentState[key] !== newState[key]) {
+              changed = true;
+              break;
+            }
+          }
+          
+          if (changed) {
+            componentsUpdated = true;
+            return { ...comp, state: evaluatedState };
+          }
+          return comp;
+        });
+        
         set({
           simulation: result,
           activeNodes: newActiveNodes,
           positiveNodes: result.positiveReachable,
           negativeNodes: result.negativeReachable,
+          ...(componentsUpdated ? { components: updatedComponents } : {}),
         });
       },
       
