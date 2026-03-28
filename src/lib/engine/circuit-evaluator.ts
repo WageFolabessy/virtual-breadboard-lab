@@ -327,7 +327,8 @@ function floodFill(
   direction: 'forward' | 'backward',
   positiveCtx?: Set<string>,
   negativeCtx?: Set<string>,
-  initialStrength: CurrentStrength = 'strong'
+  initialStrength: CurrentStrength = 'strong',
+  oppositeStrongNodes?: Set<string>
 ): FloodFillResult {
   // Track strong and weak reachable nodes separately
   const strongReachable = new Set<string>();
@@ -385,6 +386,12 @@ function floodFill(
     }
     
     const { nodeId: currentNode, strength: currentStrength } = queue.shift()!;
+    
+    // NEW ALGORITHM (v7.2): Sink all current into strong nodes of the opposite polarity.
+    // This prevents weak current from falsely propagating downstream past a short to ground/VCC.
+    if (oppositeStrongNodes && oppositeStrongNodes.has(currentNode)) {
+      continue;
+    }
     
     // === TRAVERSE THROUGH WIRES ===
     // Wires PRESERVE current strength (strong stays strong, weak stays weak)
@@ -703,9 +710,7 @@ export function evaluateCircuit(
   // Pull-down/pull-up override: strong annihilates opposite-polarity weak
   // Component activation uses resolved (strong ∪ weak)Positive and (strong ∪ weak)Negative
   let strongPositiveNodes = new Set<string>();
-  let weakPositiveNodes = new Set<string>();
   let strongNegativeNodes = new Set<string>();
-  let weakNegativeNodes = new Set<string>();
   
   // Combined sets for backwards compatibility and activation checks
   let positiveReachable = new Set<string>();
@@ -715,6 +720,7 @@ export function evaluateCircuit(
   
   for (let pass = 0; pass < MAX_STABILIZATION_PASSES; pass++) {
     // Flood from POSITIVE (forward direction) — passing current context for transistor checks
+    // FIX: Pass previous pass's strongNegativeNodes to sink positive current and prevent downstream propagation
     const posResult = floodFill(
       initialPositiveSeeds,
       wireAdjacency,
@@ -723,37 +729,49 @@ export function evaluateCircuit(
       'forward',
       positiveReachable,  // Previous pass context (combined for transistor checks)
       negativeReachable,
-      'strong' // Start with strong current from battery
+      'strong', // Start with strong current from battery
+      strongNegativeNodes
     );
     
     // Flood from NEGATIVE (backward direction)
     // Use UPDATED positive sets for PNP base checks
-    const newPositiveCombined = new Set([...posResult.strong, ...posResult.weak]);
+    const currentPositiveCombined = new Set([...posResult.strong, ...posResult.weak]);
+    // FIX: Pass current pass's strong positive nodes to sink negative current
     const negResult = floodFill(
       initialNegativeSeeds,
       wireAdjacency,
       componentAdjacency,
       connectionCache,
       'backward',
-      newPositiveCombined,  // Use UPDATED positive set for PNP base checks
+      currentPositiveCombined,  // Use UPDATED positive set for PNP base checks
       negativeReachable,
-      'strong' // Start with strong current from battery
+      'strong', // Start with strong current from battery
+      posResult.strong
     );
     
-    // Compute combined sets for stabilization check
-    const newNegativeCombined = new Set([...negResult.strong, ...negResult.weak]);
+    // === STRONG OVERRIDE RESOLUTION (v7.2: Inside Stabilization Loop) ===
+    // Pull-DOWN: Strong negative annihilates weak positive (sink to GND)
+    for (const node of negResult.strong) {
+      posResult.weak.delete(node);
+    }
+    // Pull-UP: Strong positive annihilates weak negative (sink to VCC)
+    for (const node of posResult.strong) {
+      negResult.weak.delete(node);
+    }
     
-    // Check if sets have stabilized (no new nodes energized)
-    const hasChanged = newPositiveCombined.size !== positiveReachable.size ||
-                       newNegativeCombined.size !== negativeReachable.size;
+    // Compute stable combined sets for stabilization check
+    const stablePositiveCombined = new Set([...posResult.strong, ...posResult.weak]);
+    const stableNegativeCombined = new Set([...negResult.strong, ...negResult.weak]);
+    
+    // Check if sets have stabilized (no new nodes energized or overridden)
+    const hasChanged = stablePositiveCombined.size !== positiveReachable.size ||
+                       stableNegativeCombined.size !== negativeReachable.size;
     
     // Update all tracking sets
     strongPositiveNodes = posResult.strong;
-    weakPositiveNodes = posResult.weak;
     strongNegativeNodes = negResult.strong;
-    weakNegativeNodes = negResult.weak;
-    positiveReachable = newPositiveCombined;
-    negativeReachable = newNegativeCombined;
+    positiveReachable = stablePositiveCombined;
+    negativeReachable = stableNegativeCombined;
     
     if (!hasChanged) break; // Stable — no transistors changed state
   }
@@ -794,33 +812,8 @@ export function evaluateCircuit(
     }
   }
   
-  // === STRONG OVERRIDE RESOLUTION (v7.1: Pull-Down/Pull-Up Logic) ===
-  // In physical circuits, a direct (strong) connection to Ground/VCC completely
-  // overwhelms a resistive (weak) connection of opposite polarity.
-  // 
-  // Example: Battery+ → Resistor → [Node A] → Switch(closed) → Battery-
-  //          Node A is weakPositive (through resistor) AND strongNegative (through switch)
-  //          The switch "pulls" Node A to Ground, overpowering the weak positive.
-  //          Result: LED with anode at Node A should be OFF (no positive voltage).
-  //
-  // RESOLUTION RULES:
-  // - If strongNegative ∩ weakPositive → delete from weakPositive (pulled to GND)
-  // - If strongPositive ∩ weakNegative → delete from weakNegative (pulled to VCC)
-  {
-    // Pull-DOWN: Strong negative annihilates weak positive
-    for (const node of strongNegativeNodes) {
-      weakPositiveNodes.delete(node);
-    }
-    
-    // Pull-UP: Strong positive annihilates weak negative
-    for (const node of strongPositiveNodes) {
-      weakNegativeNodes.delete(node);
-    }
-    
-    // Rebuild combined sets AFTER override resolution
-    positiveReachable = new Set([...strongPositiveNodes, ...weakPositiveNodes]);
-    negativeReachable = new Set([...strongNegativeNodes, ...weakNegativeNodes]);
-  }
+  // Note: Strong Override Resolution has been moved inside the stabilization loop
+  // in v7.2 to ensure overrides correctly settle Transistor context paths.
   
   // === STEP 4: EVALUATE EACH COMPONENT (Trait-Driven) ===
   // COMPONENT ACTIVATION (v7.1): Uses resolved (strong ∪ weak) reachable sets.
